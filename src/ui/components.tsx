@@ -6,7 +6,6 @@ import {
   FlatList,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -32,6 +31,7 @@ import Svg, {
 import { formatPaise } from '../domain/money';
 import type { Category, Direction } from '../domain/types';
 import { categoryVisual } from './categoryVisuals';
+import { KeyboardAwareScrollView, useRevealOnFocus } from './keyboard';
 import { alpha, radius, spacing, type, useTheme } from './theme';
 
 /** Space reserved under tab screens for the floating tab bar. */
@@ -245,18 +245,15 @@ export function Screen({
       <AppBackground />
       <View style={[styles.flex, { paddingTop: insets.top }]}>
         {scroll ? (
-          <ScrollView
+          <KeyboardAwareScrollView
             style={styles.flex}
-            contentContainerStyle={{
-              paddingHorizontal: pad,
-              paddingBottom: bottom,
-            }}
-            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingHorizontal: pad }}
+            bottomInset={bottom}
             showsVerticalScrollIndicator={false}
           >
             {header}
             {children}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         ) : (
           <View style={[styles.flex, { paddingHorizontal: pad }]}>
             {header}
@@ -643,6 +640,7 @@ export function Field({
   ...props
 }: TextInputProps & { label: string; icon?: LucideIcon; prefix?: string }) {
   const t = useTheme();
+  const reveal = useRevealOnFocus();
   const [focused, setFocused] = React.useState(false);
   return (
     <View style={styles.field}>
@@ -670,6 +668,7 @@ export function Field({
           {...props}
           onFocus={e => {
             setFocused(true);
+            reveal();
             props.onFocus?.(e);
           }}
           onBlur={e => {
@@ -700,6 +699,7 @@ export function AmountInput({
   autoFocus?: boolean;
 }) {
   const t = useTheme();
+  const reveal = useRevealOnFocus();
   return (
     <View style={styles.amountInputWrap}>
       <Text style={[type.caption, { color: t.textMuted }]}>
@@ -715,6 +715,7 @@ export function AmountInput({
           placeholder="0"
           placeholderTextColor={t.textSubtle}
           autoFocus={autoFocus}
+          onFocus={reveal}
           style={[
             styles.amountInput,
             { color: direction === 'credit' ? t.credit : t.text },
