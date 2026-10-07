@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {AppState} from 'react-native';
-import type {AppStateStatus} from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import {
   drainQueue,
   isPermissionGranted,
@@ -8,7 +8,7 @@ import {
   onCaptured,
   openPermissionSettings,
 } from './transactionCapture';
-import type {PersistFn} from './transactionCapture';
+import type { PersistFn } from './transactionCapture';
 
 type Options = {
   /** Saves a batch to the app DB. Upsert on item.id so a retried batch is harmless. */
@@ -37,7 +37,9 @@ export function useTransactionCapture({
   onError,
 }: Options): Result {
   const supported = isSupported();
-  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(
+    null,
+  );
   const [lastDrainCount, setLastDrainCount] = useState(0);
 
   // Refs so the effects below don't resubscribe when callers pass inline functions.
@@ -67,7 +69,10 @@ export function useTransactionCapture({
       return 0;
     }
     try {
-      const count = await drainQueue(items => persistRef.current(items), batchSize);
+      const count = await drainQueue(
+        items => persistRef.current(items),
+        batchSize,
+      );
       if (mounted.current) {
         setLastDrainCount(count);
       }
@@ -97,7 +102,8 @@ export function useTransactionCapture({
       drain();
     });
 
-    let previous: AppStateStatus | null = AppState.currentState as AppStateStatus | null;
+    let previous: AppStateStatus | null =
+      AppState.currentState as AppStateStatus | null;
     const appStateSub = AppState.addEventListener('change', next => {
       if (previous !== 'active' && next === 'active') {
         // The user may have just come back from the notification-access screen.

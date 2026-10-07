@@ -1,12 +1,12 @@
-import {Platform} from 'react-native';
-import type {EventSubscription} from 'react-native';
+import { Platform } from 'react-native';
+import type { EventSubscription } from 'react-native';
 import type {
   CaptureConfig,
   PendingTransactionNotification,
   Spec,
 } from '../../specs/NativeTransactionCapture';
 
-export type {CaptureConfig, PendingTransactionNotification};
+export type { CaptureConfig, PendingTransactionNotification };
 
 /** Saves items to the app's own DB. Must resolve only after the write is durable. */
 export type PersistFn = (
@@ -48,16 +48,24 @@ export async function acknowledge(ids: ReadonlyArray<number>): Promise<number> {
   return (await native()?.acknowledge(ids)) ?? 0;
 }
 
-export async function setAllowedPackages(packages: ReadonlyArray<string>): Promise<void> {
+export async function setAllowedPackages(
+  packages: ReadonlyArray<string>,
+): Promise<void> {
   await native()?.setAllowedPackages(packages);
 }
 
-export async function setSmsPackages(packages: ReadonlyArray<string>): Promise<void> {
+export async function setSmsPackages(
+  packages: ReadonlyArray<string>,
+): Promise<void> {
   await native()?.setSmsPackages(packages);
 }
 
 export async function setSmsAppsEnabled(enabled: boolean): Promise<void> {
   await native()?.setSmsAppsEnabled(enabled);
+}
+
+export async function setCaptureEnabled(enabled: boolean): Promise<void> {
+  await native()?.setCaptureEnabled(enabled);
 }
 
 export async function getCaptureConfig(): Promise<CaptureConfig | null> {
@@ -86,7 +94,10 @@ let rerunRequested = false;
  * If the app dies between persist and acknowledge, the same items are returned next time.
  * Make `persist` idempotent by upserting on `id` (native ids are never reused).
  */
-export function drainQueue(persist: PersistFn, batchSize = 100): Promise<number> {
+export function drainQueue(
+  persist: PersistFn,
+  batchSize = 100,
+): Promise<number> {
   if (inFlight) {
     rerunRequested = true;
     return inFlight;

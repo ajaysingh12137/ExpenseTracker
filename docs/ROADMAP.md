@@ -1,81 +1,53 @@
 # Roadmap to Play Store launch
 
-Legend: ✅ done · 🟡 partly done · ⬜ not started. Phases run in order. A phase is done when
-its exit criteria are met, not when its code is written.
+`docs/PRD.md` is the source of truth; this file only orders the work. Legend: ✅ done ·
+🟡 partly done · ⬜ not started. A phase is done when its gate is met, not when its code is written.
 
-## Phase 0 — Capture module ✅ (code) / ⬜ (verified)
-- ✅ Notification listener, filter, native queue, config, TurboModule, JS wrapper + hook.
-- ✅ Debug build, `tsc`, `eslint` pass. (The service file was edited after the last APK build.)
-- ⬜ First commit of the work so far.
+## Phase 1 — Prove capture on real phones ⬜ (gate for everything else)
+- ✅ Capture module: listener, filter, native queue, config, TurboModule, JS wrapper + hook.
+- ✅ Capture fixes from review (2026-10-07): no silent merge of identical payments (inbox flags
+  possible duplicates), `dedupKey` exposed to JS and unique in the JS DB, shade rescan skips items
+  older than the seen window, account-number redaction, native capture on/off flag, periodic purge,
+  `dataExtractionRules`, InboxStyle + MessagingStyle text extraction.
+- ⬜ Verify default package names: `adb shell pm list packages` on 3+ phones; fix `CaptureConfig`.
+- ⬜ Collect redacted real samples per bank/UPI app → Jest fixtures (replace the synthetic ones).
+- ⬜ Device test plan: grant access, live capture, app killed, reboot, app update (`adb install -r`),
+  force-stop, revoke + re-grant, Doze/battery saver. Record results in `docs/device-test-log.md`.
+- ⬜ Devices: Samsung plus at least one Xiaomi/Redmi, Oppo/Realme or Vivo.
+- ⬜ One-week capture-rate audit against a real bank statement (decides how important SMS opt-in is).
+- **Gate:** every scenario recorded as works / lost / duplicated; losses fixed or documented.
 
-## Phase 1 — Real-device testing ⬜
-- Verify default package names: `adb shell pm list packages` on 3+ phones; fix `CaptureConfig`.
-- Collect **real notification samples** (redacted) per bank/UPI app → these become Jest fixtures.
-  Record which style each app uses (BigText / Inbox / MessagingStyle).
-- Test plan per device: grant access, live capture, app killed, reboot, app update
-  (`adb install -r`), force-stop, revoke + re-grant access, Doze/battery saver.
-- Devices: at least one each of Xiaomi/Redmi, Samsung, Oppo/Vivo/Realme, a Pixel or near-stock phone.
-- Exit: each scenario's result recorded (works / lost / duplicated) in `docs/device-test-log.md`.
+## Phase 2 — MVP app 🟡 (code written, not device-tested)
+- ✅ op-sqlite database: raw_captures, transactions, merchants, merchant_overrides, categories,
+  settings; migrations; `persist()` with upsert on id.
+- ✅ Rule parser (generic Indian bank/UPI formats, synthetic fixtures) + category map that learns
+  from corrections.
+- ✅ AI fallback client + Supabase Edge Function source (not deployed; app works without it).
+- ✅ Draft inbox (swipe to confirm/ignore, edit), manual entry, voice entry (system speech dialog).
+- ✅ Monthly overview: category breakdown, trend vs last month, top merchants.
+- ✅ Onboarding: welcome, privacy disclosure, notification access, SMS opt-in, battery guide, app lock.
+- ⬜ See the UI running on a phone (debug APK installed 2026-10-07 but the phone was locked; never viewed).
+- ⬜ Deploy the backend function; set `AI_PARSE_URL`; per-user auth + rate limits.
+- ⬜ JUnit tests for `TransactionFilter` and `CaptureQueue`.
+- **Gate:** full capture → confirm flow works on the Phase 1 devices; parse-rate target set from
+  real fixtures.
 
-## Phase 2 — Fixes from code review ⬜
-1. Dedup: stop silently merging identical payments within 2 min; prefer surfacing possible
-   duplicates in the inbox (`CaptureQueue.kt` isDuplicate).
-2. Re-capture after 48 h: skip shade-recovered notifications older than the seen window, and/or
-   expose `dedupKey` to JS so the JS DB enforces uniqueness permanently.
-3. Backup / device transfer: add `dataExtractionRules` excluding capture DB + prefs (and the
-   future JS DB).
-4. Native "capture enabled" flag so in-app consent withdrawal stops capture without revoking
-   system access.
-5. Run `purgeExpired` periodically, not only on listener connect.
-6. Handle `EXTRA_TEXT_LINES` (InboxStyle) if Phase 1 samples show it.
-7. Prettier-format `src/` and `specs/`.
-- Exit: Phase 1 scenarios re-run, all pass or are documented as known limitations.
+## Phase 3 — Compliance + closed test ⬜
+- Privacy policy (public URL), Data Safety form, in-app disclosure text reviewed against current
+  Google Play policy pages. Decide SMS-app capture: keep, or remove before submission.
+- Release keystore + Play App Signing (release currently signs with the debug key).
+- Enable R8/minify and test the release build (TurboModule classes must survive).
+- DPDP Act review.
+- Closed testing track with Play's current minimum testers/duration.
+- **Gate:** closed-test feedback addressed; no capture-loss reports open.
 
-## Phase 3 — JS database + `persist` ⬜
-- Choose DB (decision pending: e.g. op-sqlite, WatermelonDB, Realm; check New Architecture /
-  RN 0.87 support at the time of choosing).
-- Tables: `raw_captures` (upsert on native id; also unique on dedupKey) separate from
-  `transactions` (parsed, with `raw_capture_id`, parser version, status draft/confirmed).
-- Implement `persist()`; wire `useTransactionCapture` in `App.tsx`.
-- Exit: captured items survive app kill between persist and ack with no duplicates (tests).
+## Phase 4 — Launch ⬜
+- Staged production rollout, crash reporting without PII, feedback loop for unparsed formats,
+  AI cost per user tracked.
 
-## Phase 4 — Consent / disclosure screen ⬜
-- Prominent disclosure **before** sending the user to notification-access settings.
-- Separate opt-in toggle for SMS-app notifications.
-- Pass `enabled` to the hook only after consent; persist consent + timestamp.
-- Battery-optimization / autostart guidance screen (required on Xiaomi/Oppo/Vivo/Samsung).
-
-## Phase 5 — On-device regex parser (test-first) ⬜
-- Jest fixtures from Phase 1 samples **first**, then per-bank/app rules.
-- Output: amount, direction (debit/credit), merchant/payee, account tail, ref no., timestamp,
-  confidence. Version the parser; re-parse `raw_captures` on version bump.
-- Merchant→category map with learning from user corrections.
-- Exit: agreed parse-rate target on fixture set (target to be set after seeing samples).
-
-## Phase 6 — AI fallback backend ⬜
-- Serverless function; LLM key server-side only; strict JSON schema output, validated.
-- Cache by normalized-text hash; rate limit; no raw text in server logs.
-- Send only the unparsed notification text. Decide provider/model at build time.
-
-## Phase 7 — Draft inbox UI ⬜
-- List of drafts; swipe to confirm/reject; edit amount/merchant/category; duplicate hints.
-- Navigation + state library chosen here.
-
-## Phase 8 — Overview / charts ⬜
-- Monthly totals, category breakdown, trend. Offline-first.
-
-## Phase 9 — Receipt OCR ⬜
-- ML Kit text recognition on-device → same parser/AI fallback → draft inbox.
-
-## Phase 10 — Compliance + closed testing ⬜
-- Privacy policy (hosted URL), Data Safety form, Notification listener / sensitive-data
-  declarations. **Verify every policy point against Google's current Play docs**; policies change.
-- Release keystore + Play App Signing (release build currently signs with debug key).
-- Enable R8/minify and test the release build (TurboModule classes need to survive).
-- Closed testing track; Play's minimum tester/duration requirements (verify current rules).
-
-## Phase 11 — Launch ⬜
-- Production rollout (staged), crash reporting without PII, feedback loop for unparsed formats.
+## v1.1
+Receipt OCR (ML Kit on-device first), home-screen widget, budgets and alerts, export (CSV, PDF).
 
 ## Later
-Cloud sync, monthly AI insights, freemium subscription (insights, exports, budgets), voice entry.
+Cloud backup and sync (encrypted, opt-in), AI monthly insights (premium), subscription,
+regional-language alerts.

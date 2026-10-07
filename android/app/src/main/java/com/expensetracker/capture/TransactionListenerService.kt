@@ -13,6 +13,9 @@ class TransactionListenerService : NotificationListenerService() {
   // inserts stay ordered and the main thread is never blocked.
   private lateinit var io: ExecutorService
 
+  // Only touched on the io thread.
+  private var lastPurgeAt = 0L
+
   override fun onCreate() {
     super.onCreate()
     io = Executors.newSingleThreadExecutor()
@@ -20,11 +23,16 @@ class TransactionListenerService : NotificationListenerService() {
 
   override fun onListenerConnected() {
     super.onListenerConnected()
-    io.execute { runCatching { CaptureQueue.get(this).purgeExpired() }.onFailure(::logError) }
+    io.execute { purgeIfDue(force = true) }
 
     // Recover alerts posted while we were unbound (after reboot, rebind, or first grant) that
-    // are still in the shade. Dedup makes re-processing already-captured ones a no-op.
-    runCatching { activeNotifications }.getOrNull()?.forEach(::handle)
+    // are still in the shade. Dedup makes re-processing already-captured ones a no-op. Items
+    // older than the seen window are skipped: their dedup hash may have expired, and the JS
+    // database's unique dedup_key would be the only thing stopping a re-capture.
+    val cutoff = System.currentTimeMillis() - CaptureQueue.SEEN_TTL_MS
+    runCatching { activeNotifications }.getOrNull()
+      ?.filter { it.postTime >= cutoff }
+      ?.forEach(::handle)
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -35,13 +43,28 @@ class TransactionListenerService : NotificationListenerService() {
     if (!CaptureConfig.isAllowed(this, sbn.packageName)) return
 
     // Rejected notifications never leave this stack frame.
-    val captured = runCatching { TransactionFilter.evaluate(sbn) }.getOrNull() ?: return
+    val captured = runCatching { TransactionFilter.evaluate(sbn) }.getOrNull()
+    if (captured.isNullOrEmpty()) return
 
     io.execute {
       runCatching {
-        if (CaptureQueue.get(this).enqueue(captured)) CaptureSignal.notifyCaptured()
+        val queue = CaptureQueue.get(this)
+        var added = false
+        for (item in captured) {
+          if (queue.enqueue(item)) added = true
+        }
+        if (added) CaptureSignal.notifyCaptured()
+        purgeIfDue(force = false)
       }.onFailure(::logError)
     }
+  }
+
+  /** Runs on the io thread. Keeps 30-day / 48-hour expiry working on long-lived listeners. */
+  private fun purgeIfDue(force: Boolean) {
+    val now = System.currentTimeMillis()
+    if (!force && now - lastPurgeAt < PURGE_INTERVAL_MS) return
+    runCatching { CaptureQueue.get(this).purgeExpired(now) }.onFailure(::logError)
+    lastPurgeAt = now
   }
 
   override fun onListenerDisconnected() {
@@ -63,5 +86,6 @@ class TransactionListenerService : NotificationListenerService() {
 
   private companion object {
     const val TAG = "TransactionCapture"
+    const val PURGE_INTERVAL_MS = 6L * 60 * 60 * 1000
   }
 }

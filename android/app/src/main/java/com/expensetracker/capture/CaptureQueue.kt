@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 data class PendingItem(
   val id: Long,
+  val dedupKey: String,
   val packageName: String,
   val title: String,
   val body: String,
@@ -22,7 +23,10 @@ data class PendingItem(
  *  - pending: captured items waiting for JS (raw text lives only here, and only until acked
  *    or until PENDING_TTL_MS passes).
  *  - seen: hashes only, never text. Remembers recent captures so a repost or update of the
- *    same notification is not queued twice, even after JS has already acknowledged it.
+ *    same notification (same content AND same event time) is not queued twice, even after JS
+ *    has acknowledged it. Identical content with a different event time is a separate payment
+ *    and is always queued (PRD: repeat payments must stay separate; the inbox flags possible
+ *    duplicates instead of merging them).
  */
 class CaptureQueue private constructor(context: Context) :
   SQLiteOpenHelper(context.applicationContext, DB_NAME, null, DB_VERSION) {
@@ -94,20 +98,11 @@ class CaptureQueue private constructor(context: Context) :
   }
 
   private fun isDuplicate(db: SQLiteDatabase, item: CapturedNotification, now: Long): Boolean {
-    // Same content and same Notification.when within the seen window: a repost/update.
+    // Same content and same event time within the seen window: a repost/update.
     db.rawQuery(
       "SELECT 1 FROM seen WHERE dedup_key = ? AND seen_at >= ? LIMIT 1",
       arrayOf(item.dedupKey, (now - SEEN_TTL_MS).toString()),
     ).use { if (it.moveToFirst()) return true }
-
-    // Same content within a short window even if `when` changed: apps that re-notify and
-    // reset the timestamp. Two genuinely identical payments seconds apart are merged; see
-    // the known limitations.
-    db.rawQuery(
-      "SELECT 1 FROM seen WHERE content_key = ? AND seen_at >= ? LIMIT 1",
-      arrayOf(item.contentKey, (now - REPOST_WINDOW_MS).toString()),
-    ).use { if (it.moveToFirst()) return true }
-
     return false
   }
 
@@ -115,7 +110,7 @@ class CaptureQueue private constructor(context: Context) :
     val safeLimit = limit.coerceIn(1, MAX_BATCH)
     val items = ArrayList<PendingItem>()
     readableDatabase.rawQuery(
-      "SELECT id, package_name, title, body, posted_at, captured_at FROM pending " +
+      "SELECT id, dedup_key, package_name, title, body, posted_at, captured_at FROM pending " +
         "ORDER BY id ASC LIMIT $safeLimit",
       null,
     ).use { c ->
@@ -123,11 +118,12 @@ class CaptureQueue private constructor(context: Context) :
         items.add(
           PendingItem(
             id = c.getLong(0),
-            packageName = c.getString(1),
-            title = c.getString(2),
-            body = c.getString(3),
-            postedAt = c.getLong(4),
-            capturedAt = c.getLong(5),
+            dedupKey = c.getString(1),
+            packageName = c.getString(2),
+            title = c.getString(3),
+            body = c.getString(4),
+            postedAt = c.getLong(5),
+            capturedAt = c.getLong(6),
           ),
         )
       }
@@ -170,8 +166,7 @@ class CaptureQueue private constructor(context: Context) :
     private const val DB_VERSION = 1
     const val MAX_BATCH = 200
     private const val PENDING_TTL_MS = 30L * 24 * 60 * 60 * 1000
-    private const val SEEN_TTL_MS = 48L * 60 * 60 * 1000
-    private const val REPOST_WINDOW_MS = 2L * 60 * 1000
+    const val SEEN_TTL_MS = 48L * 60 * 60 * 1000
 
     @Volatile private var instance: CaptureQueue? = null
 

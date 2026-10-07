@@ -1,6 +1,9 @@
 package com.expensetracker.capture
 
 import android.app.Notification
+import android.os.Build
+import android.os.Bundle
+import android.os.Parcelable
 import android.service.notification.StatusBarNotification
 import java.security.MessageDigest
 
@@ -9,9 +12,9 @@ data class CapturedNotification(
   val title: String,
   val body: String,
   val postedAt: Long,
-  /** Exact identity: package + title + body + Notification.when. */
+  /** Exact identity: package + title + body + event time. Reposts of the same alert match. */
   val dedupKey: String,
-  /** Content identity: package + title + body, used for the short repost window. */
+  /** Content identity: package + title + body. Stored for diagnostics; never used to merge. */
   val contentKey: String,
 )
 
@@ -43,49 +46,108 @@ object TransactionFilter {
     RegexOption.IGNORE_CASE,
   )
 
+  // "a/c 123456789012" -> "a/c XX9012". Banks usually mask already; this catches the ones that don't.
+  private val LABELLED_ACCOUNT = Regex(
+    "\\b(a/c|acct|account|card)(\\s*(?:no\\.?|number|ending(?:\\s+with)?)?\\s*[:#-]?\\s*)(\\d{5,})",
+    RegexOption.IGNORE_CASE,
+  )
+
+  // 13-19 digit runs are card-number length. 12-digit UPI reference numbers are kept.
+  private val CARD_LENGTH_DIGITS = Regex("(?<![\\d])\\d{13,19}(?![\\d])")
+
   fun isOtp(text: String): Boolean = OTP_PATTERNS.any { it.containsMatchIn(text) }
 
   fun isTransactionLike(text: String): Boolean =
     CURRENCY_AMOUNT.containsMatchIn(text) && TRANSACTION_KEYWORD.containsMatchIn(text)
 
+  /** PRD: never store full account numbers; keep only the last 4 digits. */
+  fun redactAccountNumbers(text: String): String =
+    text
+      .replace(LABELLED_ACCOUNT) { m -> "${m.groupValues[1]}${m.groupValues[2]}XX${m.groupValues[3].takeLast(4)}" }
+      .replace(CARD_LENGTH_DIGITS) { m -> "XX${m.value.takeLast(4)}" }
+
   /**
-   * Returns a capture candidate, or null if the notification should be ignored.
+   * Returns zero or more capture candidates. MessagingStyle notifications (SMS apps) can carry
+   * several messages; each one is classified separately so one OTP doesn't hide a debit alert
+   * next to it, and an OTP is never stored because a neighbour looked like a transaction.
    * Caller is responsible for the allowlist check.
    */
-  fun evaluate(sbn: StatusBarNotification): CapturedNotification? {
-    val notification = sbn.notification ?: return null
-    if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null
+  fun evaluate(sbn: StatusBarNotification): List<CapturedNotification> {
+    val notification = sbn.notification ?: return emptyList()
+    if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return emptyList()
     // "Payment in progress" style status notifications; the final alert is a normal one.
-    if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return null
+    if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return emptyList()
 
-    val extras = notification.extras ?: return null
+    val extras = notification.extras ?: return emptyList()
     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+
+    val messages = messagingStyleTexts(extras)
+    if (messages.isNotEmpty()) {
+      return messages.mapNotNull { (text, time) ->
+        candidate(sbn, title, text, if (time > 0) time else notification.`when`)
+      }
+    }
+
     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
-
     // Big text is usually the untruncated version of text; keep both only if they differ.
     val body = when {
       bigText.isEmpty() -> text
       text.isEmpty() || bigText.contains(text) -> bigText
       else -> "$text\n$bigText"
     }
-    if (body.isEmpty()) return null
+    if (body.isNotEmpty()) {
+      return listOfNotNull(candidate(sbn, title, body, notification.`when`))
+    }
 
-    val combined = "$title\n$body"
-    if (isOtp(combined)) return null
-    if (!isTransactionLike(combined)) return null
+    // InboxStyle: one line per message, only used when there is no main text.
+    val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+      ?.map { it.toString().trim() }
+      ?.filter { it.isNotEmpty() }
+      .orEmpty()
+    return lines.mapNotNull { candidate(sbn, title, it, notification.`when`) }
+  }
 
-    val contentKey = sha256("${sbn.packageName}\u0000$title\u0000$body")
-    val dedupKey = sha256("$contentKey\u0000${notification.`when`}")
+  private fun candidate(
+    sbn: StatusBarNotification,
+    title: String,
+    rawBody: String,
+    eventTime: Long,
+  ): CapturedNotification? {
+    val combinedRaw = "$title\n$rawBody"
+    if (isOtp(combinedRaw)) return null
+    if (!isTransactionLike(combinedRaw)) return null
+
+    val safeTitle = redactAccountNumbers(title)
+    val body = redactAccountNumbers(rawBody)
+    val contentKey = sha256("${sbn.packageName}\u0000$safeTitle\u0000$body")
+    val dedupKey = sha256("$contentKey\u0000$eventTime")
 
     return CapturedNotification(
       packageName = sbn.packageName,
-      title = title,
+      title = safeTitle,
       body = body,
       postedAt = sbn.postTime,
       dedupKey = dedupKey,
       contentKey = contentKey,
     )
+  }
+
+  /** (text, timestamp) per MessagingStyle message, read from the framework's bundle keys. */
+  private fun messagingStyleTexts(extras: Bundle): List<Pair<String, Long>> {
+    val parcelables: Array<out Parcelable>? =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        extras.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java)
+      } else {
+        @Suppress("DEPRECATION")
+        extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+      }
+    if (parcelables.isNullOrEmpty()) return emptyList()
+    return parcelables.mapNotNull { p ->
+      val bundle = p as? Bundle ?: return@mapNotNull null
+      val text = bundle.getCharSequence("text")?.toString()?.trim().orEmpty()
+      if (text.isEmpty()) null else text to bundle.getLong("time", 0L)
+    }
   }
 
   private fun sha256(input: String): String =

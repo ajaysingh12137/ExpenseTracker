@@ -102,6 +102,7 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
           array.pushMap(
             Arguments.createMap().apply {
               putDouble("id", item.id.toDouble())
+              putString("dedupKey", item.dedupKey)
               putString("packageName", item.packageName)
               putString("title", item.title)
               putString("body", item.body)
@@ -146,6 +147,11 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
     promise.resolve(null)
   }
 
+  override fun setCaptureEnabled(enabled: Boolean, promise: Promise) {
+    CaptureConfig.setCaptureEnabled(reactApplicationContext, enabled)
+    promise.resolve(null)
+  }
+
   override fun getCaptureConfig(promise: Promise) {
     val context = reactApplicationContext
     promise.resolve(
@@ -159,6 +165,7 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
           Arguments.fromList(CaptureConfig.getSmsPackages(context).sorted()),
         )
         putBoolean("smsAppsEnabled", CaptureConfig.isSmsAppsEnabled(context))
+        putBoolean("captureEnabled", CaptureConfig.isCaptureEnabled(context))
       },
     )
   }

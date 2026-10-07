@@ -2,6 +2,7 @@ package com.expensetracker
 
 import android.app.Application
 import com.expensetracker.capture.TransactionCapturePackage
+import com.expensetracker.device.DeviceServicesPackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -16,6 +17,7 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(TransactionCapturePackage())
+          add(DeviceServicesPackage())
         },
     )
   }

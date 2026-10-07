@@ -20,6 +20,7 @@ object CaptureConfig {
   private const val KEY_PACKAGES = "allowed_packages"
   private const val KEY_SMS_PACKAGES = "sms_packages"
   private const val KEY_SMS_ENABLED = "sms_apps_enabled"
+  private const val KEY_CAPTURE_ENABLED = "capture_enabled"
 
   /** Bank and UPI apps. Verify on device. */
   val DEFAULT_PACKAGES: Set<String> = setOf(
@@ -57,6 +58,17 @@ object CaptureConfig {
   fun isSmsAppsEnabled(context: Context): Boolean =
     prefs(context).getBoolean(KEY_SMS_ENABLED, false)
 
+  /**
+   * Master switch, off until the user accepts the in-app disclosure. Lets the user withdraw
+   * consent inside the app without having to find the system notification-access screen.
+   */
+  fun isCaptureEnabled(context: Context): Boolean =
+    prefs(context).getBoolean(KEY_CAPTURE_ENABLED, false)
+
+  fun setCaptureEnabled(context: Context, enabled: Boolean) {
+    prefs(context).edit().putBoolean(KEY_CAPTURE_ENABLED, enabled).apply()
+  }
+
   fun setPackages(context: Context, packages: Collection<String>) {
     prefs(context).edit().putStringSet(KEY_PACKAGES, sanitize(packages)).apply()
   }
@@ -69,12 +81,18 @@ object CaptureConfig {
     prefs(context).edit().putBoolean(KEY_SMS_ENABLED, enabled).apply()
   }
 
+  /** Restores default allowlists. Keeps the consent-driven capture switch as it is. */
   fun reset(context: Context) {
-    prefs(context).edit().clear().apply()
+    prefs(context).edit()
+      .remove(KEY_PACKAGES)
+      .remove(KEY_SMS_PACKAGES)
+      .remove(KEY_SMS_ENABLED)
+      .apply()
   }
 
   fun isAllowed(context: Context, packageName: String): Boolean {
     if (packageName == context.packageName) return false
+    if (!isCaptureEnabled(context)) return false
     if (packageName in getPackages(context)) return true
     return isSmsAppsEnabled(context) && packageName in getSmsPackages(context)
   }
