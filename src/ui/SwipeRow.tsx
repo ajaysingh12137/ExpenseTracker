@@ -1,3 +1,4 @@
+import { Check, PencilLine, X } from 'lucide-react-native';
 import React, { useMemo, useRef } from 'react';
 import {
   Animated,
@@ -8,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { AccessibilityActionEvent } from 'react-native';
-import { radius, spacing, useTheme } from './theme';
+import { alpha, radius, spacing, useTheme } from './theme';
 
 const THRESHOLD = 96;
 
@@ -23,6 +24,7 @@ export function SwipeRow({
   onIgnore,
   onOpen,
   confirmLabel = 'Confirm',
+  confirmIsEdit = false,
 }: {
   children: React.ReactNode;
   label: string;
@@ -30,6 +32,8 @@ export function SwipeRow({
   onIgnore: () => void;
   onOpen: () => void;
   confirmLabel?: string;
+  /** When the right-swipe opens the editor instead of confirming (missing amount). */
+  confirmIsEdit?: boolean;
 }) {
   const t = useTheme();
   const x = useRef(new Animated.Value(0)).current;
@@ -49,7 +53,7 @@ export function SwipeRow({
           if (g.dx > THRESHOLD) {
             Animated.timing(x, {
               toValue: 500,
-              duration: 150,
+              duration: 160,
               useNativeDriver: false,
             }).start(() => {
               x.setValue(0);
@@ -58,14 +62,18 @@ export function SwipeRow({
           } else if (g.dx < -THRESHOLD) {
             Animated.timing(x, {
               toValue: -500,
-              duration: 150,
+              duration: 160,
               useNativeDriver: false,
             }).start(() => {
               x.setValue(0);
               handlers.current.onIgnore();
             });
           } else {
-            Animated.spring(x, { toValue: 0, useNativeDriver: false }).start();
+            Animated.spring(x, {
+              toValue: 0,
+              useNativeDriver: false,
+              bounciness: 6,
+            }).start();
           }
         },
         onPanResponderTerminate: () =>
@@ -88,14 +96,46 @@ export function SwipeRow({
     }
   };
 
+  const confirmOpacity = x.interpolate({
+    inputRange: [0, 40, THRESHOLD],
+    outputRange: [0, 0.6, 1],
+    extrapolate: 'clamp',
+  });
+  const ignoreOpacity = x.interpolate({
+    inputRange: [-THRESHOLD, -40, 0],
+    outputRange: [1, 0.6, 0],
+    extrapolate: 'clamp',
+  });
+  const ConfirmIcon = confirmIsEdit ? PencilLine : Check;
+
   return (
     <View style={styles.wrap}>
-      <View style={[styles.under, { backgroundColor: t.surfaceAlt }]}>
+      <Animated.View
+        style={[
+          styles.under,
+          styles.underLeft,
+          { backgroundColor: alpha(t.credit, 0.18), opacity: confirmOpacity },
+        ]}
+      >
+        <View style={[styles.actionDot, { backgroundColor: t.credit }]}>
+          <ConfirmIcon size={18} color="#FFFFFF" strokeWidth={3} />
+        </View>
         <Text style={[styles.underText, { color: t.credit }]}>
-          ✓ {confirmLabel}
+          {confirmLabel}
         </Text>
-        <Text style={[styles.underText, { color: t.danger }]}>Ignore ✕</Text>
-      </View>
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.under,
+          styles.underRight,
+          { backgroundColor: alpha(t.danger, 0.16), opacity: ignoreOpacity },
+        ]}
+      >
+        <Text style={[styles.underText, { color: t.danger }]}>Ignore</Text>
+        <View style={[styles.actionDot, { backgroundColor: t.danger }]}>
+          <X size={18} color="#FFFFFF" strokeWidth={3} />
+        </View>
+      </Animated.View>
       <Animated.View
         style={{ transform: [{ translateX: x }] }}
         {...responder.panHandlers}
@@ -111,9 +151,13 @@ export function SwipeRow({
           ]}
           onAccessibilityAction={onAction}
           onPress={onOpen}
-          style={[
+          style={({ pressed }) => [
             styles.front,
-            { backgroundColor: t.surface, borderColor: t.border },
+            {
+              backgroundColor: t.elevated,
+              borderColor: t.glassBorder,
+              opacity: pressed ? 0.85 : 1,
+            },
           ]}
         >
           {children}
@@ -124,23 +168,32 @@ export function SwipeRow({
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: spacing.sm },
+  wrap: { marginBottom: spacing.sm + 2 },
   under: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
-  underText: { fontSize: 15, fontWeight: '700' },
+  underLeft: { justifyContent: 'flex-start' },
+  underRight: { justifyContent: 'flex-end' },
+  actionDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  underText: { fontSize: 15, fontWeight: '800' },
   front: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.md,
   },
 });

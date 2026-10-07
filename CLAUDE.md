@@ -67,6 +67,11 @@ docs/PRD.md docs/ROADMAP.md
 - TS: Prettier (repo `.prettierrc.js`, `{ x }` bracket spacing), strict types, named exports,
   DB access only through `src/db/*`, every write calls `notifyDataChanged()`.
 - Money is integer paise everywhere (`src/domain/money.ts`).
+- UI: "glass" design system in `src/ui/` — tokens in `theme.ts` (light + dark; no colour
+  literals in screens), primitives in `components.tsx` (Screen, GlassCard, HeroCard, Button,
+  ListRow, IconBadge, CategoryPicker…), `GlassTabBar.tsx`. Icons: `lucide-react-native` only
+  (needs `react-native-svg`); category icon/colour from `categoryVisuals.ts`, not the DB emoji.
+  Screens hide native headers and render `Screen title/onBack` themselves.
 - Changing a spec requires a native rebuild (codegen). Don't rename module/spec names casually.
 
 ## Commands (Windows dev machine)

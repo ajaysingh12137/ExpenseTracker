@@ -1,4 +1,6 @@
-import React from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import React, { useId } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -6,63 +8,233 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import type { StyleProp, TextInputProps, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  RadialGradient,
+  Rect,
+  Stop,
+} from 'react-native-svg';
 import { formatPaise } from '../domain/money';
 import type { Category, Direction } from '../domain/types';
-import { radius, spacing, useTheme } from './theme';
+import { categoryVisual } from './categoryVisuals';
+import { alpha, radius, spacing, type, useTheme } from './theme';
 
-export function Screen({
-  children,
-  scroll = true,
-  padded = true,
-  safeTop = false,
-}: {
-  children: React.ReactNode;
-  scroll?: boolean;
-  padded?: boolean;
-  /** For screens shown without a navigation header. */
-  safeTop?: boolean;
-}) {
+/** Space reserved under tab screens for the floating tab bar. */
+export const TAB_BAR_SPACE = 104;
+
+const useSvgId = (prefix: string) =>
+  `${prefix}${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+
+// ---------------------------------------------------------------------------------------------
+// Backdrop + gradients
+
+/** Soft multi-colour glow behind every screen; what makes the glass surfaces read as glass. */
+export function AppBackground() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
-  const style = [{ flex: 1, backgroundColor: t.bg }];
-  const content = {
-    padding: padded ? spacing.lg : 0,
-    paddingTop: (safeTop ? insets.top : 0) + (padded ? spacing.lg : 0),
-    paddingBottom: insets.bottom + spacing.xl,
-  };
-  if (!scroll) {
-    return <View style={[style, content]}>{children}</View>;
-  }
+  const id = useSvgId('bg');
+  const spots = [
+    { cx: '8%', cy: '4%', r: 300 },
+    { cx: '100%', cy: '38%', r: 260 },
+    { cx: '10%', cy: '92%', r: 300 },
+  ];
   return (
-    <ScrollView
-      style={style}
-      contentContainerStyle={content}
-      keyboardShouldPersistTaps="handled"
-    >
-      {children}
-    </ScrollView>
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Svg width="100%" height="100%">
+        <Defs>
+          {t.blobs.map(([color, opacity], i) => (
+            <RadialGradient
+              key={color}
+              id={`${id}${i}`}
+              cx="50%"
+              cy="50%"
+              r="50%"
+            >
+              <Stop offset="0" stopColor={color} stopOpacity={opacity} />
+              <Stop offset="1" stopColor={color} stopOpacity={0} />
+            </RadialGradient>
+          ))}
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={t.bg} />
+        {spots.map((spot, i) => (
+          <Circle
+            key={i}
+            cx={spot.cx}
+            cy={spot.cy}
+            r={spot.r}
+            fill={`url(#${id}${i % t.blobs.length})`}
+          />
+        ))}
+      </Svg>
+    </View>
   );
 }
 
-export function Card({
+/** Brand gradient filling its parent (parent sets size, radius and overflow: hidden). */
+export function GradientFill({
+  from,
+  to,
+  rounded = 0,
+}: {
+  from?: string;
+  to?: string;
+  rounded?: number;
+}) {
+  const t = useTheme();
+  const id = useSvgId('lg');
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={from ?? t.primary} />
+          <Stop offset="1" stopColor={to ?? t.primary2} />
+        </LinearGradient>
+      </Defs>
+      <Rect
+        x="0"
+        y="0"
+        width="100%"
+        height="100%"
+        rx={rounded}
+        ry={rounded}
+        fill={`url(#${id})`}
+      />
+    </Svg>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Screen scaffolding
+
+export function Screen({
+  children,
+  title,
+  subtitle,
+  onBack,
+  right,
+  scroll = true,
+  tabs = false,
+  padded = true,
+}: {
+  children: React.ReactNode;
+  title?: string;
+  subtitle?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+  scroll?: boolean;
+  /** Tab screens leave room for the floating tab bar. */
+  tabs?: boolean;
+  padded?: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const bottom = insets.bottom + (tabs ? TAB_BAR_SPACE : spacing.xl);
+  const header =
+    title || onBack || right ? (
+      <ScreenHeader
+        title={title}
+        subtitle={subtitle}
+        onBack={onBack}
+        right={right}
+      />
+    ) : null;
+  const pad = padded ? spacing.lg : 0;
+
+  return (
+    <View style={styles.flex}>
+      <AppBackground />
+      <View style={[styles.flex, { paddingTop: insets.top }]}>
+        {scroll ? (
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={{
+              paddingHorizontal: pad,
+              paddingBottom: bottom,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {header}
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={[styles.flex, { paddingHorizontal: pad }]}>
+            {header}
+            {children}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+export function ScreenHeader({
+  title,
+  subtitle,
+  onBack,
+  right,
+}: {
+  title?: string;
+  subtitle?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+}) {
+  const t = useTheme();
+  return (
+    <View style={styles.header}>
+      {onBack ? (
+        <IconButton icon={ChevronLeft} label="Back" onPress={onBack} />
+      ) : null}
+      <View style={[styles.flex, onBack ? styles.headerTextWithBack : null]}>
+        {subtitle ? (
+          <Text style={[type.caption, { color: t.textMuted }]}>{subtitle}</Text>
+        ) : null}
+        {title ? (
+          <Text
+            accessibilityRole="header"
+            style={[onBack ? type.h2 : type.title, { color: t.text }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        ) : null}
+      </View>
+      {right}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Surfaces
+
+export function GlassCard({
   children,
   style,
+  strong,
+  padded = true,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  strong?: boolean;
+  padded?: boolean;
 }) {
   const t = useTheme();
   return (
     <View
       style={[
-        styles.card,
-        { backgroundColor: t.surface, borderColor: t.border },
+        styles.glass,
+        {
+          backgroundColor: strong ? t.glassStrong : t.glass,
+          borderColor: t.glassBorder,
+          padding: padded ? spacing.lg : 0,
+        },
         style,
       ]}
     >
@@ -71,40 +243,90 @@ export function Card({
   );
 }
 
-export function Title({ children }: { children: React.ReactNode }) {
+/** Kept for existing call sites: a glass card. */
+export const Card = GlassCard;
+
+export function HeroCard({ children }: { children: React.ReactNode }) {
   const t = useTheme();
   return (
-    <Text accessibilityRole="header" style={[styles.title, { color: t.text }]}>
+    <View
+      style={[
+        styles.hero,
+        { boxShadow: `0 12px 28px ${alpha(t.primary, 0.35)}` },
+      ]}
+    >
+      <GradientFill rounded={radius.xl} />
+      {/* Light sheen across the top for depth */}
+      <View style={styles.heroSheen} />
       {children}
-    </Text>
+    </View>
   );
 }
 
-export function SectionTitle({ children }: { children: React.ReactNode }) {
+// ---------------------------------------------------------------------------------------------
+// Text
+
+export function Title({ children }: { children: React.ReactNode }) {
   const t = useTheme();
   return (
     <Text
       accessibilityRole="header"
-      style={[styles.section, { color: t.textMuted }]}
+      style={[type.title, styles.titleGap, { color: t.text }]}
     >
       {children}
     </Text>
   );
 }
 
+export function SectionTitle({
+  children,
+  action,
+}: {
+  children: React.ReactNode;
+  action?: { label: string; onPress: () => void };
+}) {
+  const t = useTheme();
+  return (
+    <View style={styles.sectionRow}>
+      <Text
+        accessibilityRole="header"
+        style={[type.overline, { color: t.textSubtle }]}
+      >
+        {children}
+      </Text>
+      {action ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={action.onPress}
+          hitSlop={12}
+          style={styles.sectionAction}
+        >
+          <Text style={[type.caption, styles.bold, { color: t.primary }]}>
+            {action.label}
+          </Text>
+          <ChevronRight size={14} color={t.primary} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export function Body({
   children,
   muted,
+  center,
 }: {
   children: React.ReactNode;
   muted?: boolean;
+  center?: boolean;
 }) {
   const t = useTheme();
   return (
     <Text
       style={[
-        styles.body,
+        type.body,
         styles.paragraph,
+        center && styles.center,
         { color: muted ? t.textMuted : t.text },
       ]}
     >
@@ -113,70 +335,37 @@ export function Body({
   );
 }
 
-export function Button({
-  label,
-  onPress,
-  variant = 'primary',
-  disabled,
-  busy,
-  accessibilityHint,
+export function AmountText({
+  paise,
+  direction,
+  size = 'md',
+  color,
 }: {
-  label: string;
-  onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger';
-  disabled?: boolean;
-  busy?: boolean;
-  accessibilityHint?: string;
+  paise: number;
+  direction: Direction;
+  size?: 'md' | 'lg' | 'xl';
+  color?: string;
 }) {
   const t = useTheme();
-  const bg =
-    variant === 'primary'
-      ? t.primary
-      : variant === 'danger'
-      ? t.danger
-      : t.surfaceAlt;
-  const fg = variant === 'secondary' ? t.text : t.onPrimary;
+  const fontSize = size === 'xl' ? 38 : size === 'lg' ? 24 : 16;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled: !!disabled || !!busy }}
-      disabled={disabled || busy}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        { backgroundColor: bg, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
-      ]}
+    <Text
+      style={{
+        fontSize,
+        fontWeight: '800',
+        letterSpacing: size === 'md' ? 0 : -0.8,
+        color: color ?? (direction === 'credit' ? t.credit : t.text),
+        fontVariant: ['tabular-nums'],
+      }}
     >
-      {busy ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
-      )}
-    </Pressable>
+      {direction === 'credit' ? '+' : ''}
+      {formatPaise(paise)}
+    </Text>
   );
 }
 
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
-  const t = useTheme();
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: t.textMuted }]}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={t.textMuted}
-        {...props}
-        style={[
-          styles.input,
-          { color: t.text, backgroundColor: t.surface, borderColor: t.border },
-        ]}
-      />
-    </View>
-  );
-}
-
-export function Amount({
+/** Kept for existing call sites. */
+export const Amount = ({
   paise,
   direction,
   large,
@@ -184,29 +373,255 @@ export function Amount({
   paise: number;
   direction: Direction;
   large?: boolean;
+}) => (
+  <AmountText paise={paise} direction={direction} size={large ? 'lg' : 'md'} />
+);
+
+// ---------------------------------------------------------------------------------------------
+// Icons
+
+export function IconBadge({
+  icon: Icon,
+  color,
+  size = 44,
+  solid,
+}: {
+  icon: LucideIcon;
+  color: string;
+  size?: number;
+  solid?: boolean;
 }) {
-  const t = useTheme();
-  const color = direction === 'credit' ? t.credit : t.text;
   return (
-    <Text style={[large ? styles.amountLarge : styles.amount, { color }]}>
-      {direction === 'credit' ? '+' : ''}
-      {formatPaise(paise)}
-    </Text>
+    <View
+      style={[
+        styles.badge,
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.34,
+          backgroundColor: solid ? color : alpha(color, 0.16),
+        },
+      ]}
+    >
+      <Icon
+        size={size * 0.48}
+        color={solid ? '#FFFFFF' : color}
+        strokeWidth={2.2}
+      />
+    </View>
   );
 }
 
-export function Pill({
-  label,
-  tone = 'neutral',
+export function CategoryBadge({
+  id,
+  size = 44,
 }: {
+  id: string;
+  size?: number;
+}) {
+  const { Icon, color } = categoryVisual(id);
+  return <IconBadge icon={Icon} color={color} size={size} />;
+}
+
+export function IconButton({
+  icon: Icon,
+  label,
+  onPress,
+  tone = 'glass',
+}: {
+  icon: LucideIcon;
   label: string;
-  tone?: 'neutral' | 'warning';
+  onPress: () => void;
+  tone?: 'glass' | 'primary';
 }) {
   const t = useTheme();
-  const color = tone === 'warning' ? t.warning : t.textMuted;
+  const primary = tone === 'primary';
   return (
-    <View style={[styles.pill, { borderColor: color }]}>
-      <Text style={[styles.pillText, { color }]}>{label}</Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.iconButton,
+        {
+          backgroundColor: primary ? t.primary : t.glassStrong,
+          borderColor: primary ? t.primary : t.glassBorder,
+          transform: [{ scale: pressed ? 0.94 : 1 }],
+        },
+      ]}
+    >
+      <Icon
+        size={20}
+        color={primary ? t.onPrimary : t.text}
+        strokeWidth={2.2}
+      />
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Buttons and controls
+
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  icon: Icon,
+  disabled,
+  busy,
+  accessibilityHint,
+  compact,
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  icon?: LucideIcon;
+  disabled?: boolean;
+  busy?: boolean;
+  accessibilityHint?: string;
+  compact?: boolean;
+}) {
+  const t = useTheme();
+  const isPrimary = variant === 'primary';
+  const fg = isPrimary
+    ? t.onPrimary
+    : variant === 'danger'
+    ? t.danger
+    : variant === 'ghost'
+    ? t.primary
+    : t.text;
+  const inactive = !!disabled || !!busy;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: inactive, busy: !!busy }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        compact && styles.buttonCompact,
+        isPrimary
+          ? {
+              boxShadow: disabled
+                ? undefined
+                : `0 8px 20px ${alpha(t.primary, 0.32)}`,
+            }
+          : variant === 'ghost'
+          ? null
+          : {
+              backgroundColor:
+                variant === 'danger' ? alpha(t.danger, 0.1) : t.glassStrong,
+              borderColor:
+                variant === 'danger' ? alpha(t.danger, 0.25) : t.glassBorder,
+              borderWidth: 1,
+            },
+        {
+          opacity: disabled ? 0.45 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
+      {isPrimary ? <GradientFill rounded={radius.md} /> : null}
+      {busy ? (
+        <ActivityIndicator color={fg} />
+      ) : (
+        <View style={styles.buttonInner}>
+          {Icon ? <Icon size={19} color={fg} strokeWidth={2.3} /> : null}
+          <Text style={[type.label, { color: fg }]}>{label}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+export function Field({
+  label,
+  icon: Icon,
+  prefix,
+  ...props
+}: TextInputProps & { label: string; icon?: LucideIcon; prefix?: string }) {
+  const t = useTheme();
+  const [focused, setFocused] = React.useState(false);
+  return (
+    <View style={styles.field}>
+      <Text style={[type.caption, styles.fieldLabel, { color: t.textMuted }]}>
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.inputWrap,
+          {
+            backgroundColor: t.glassStrong,
+            borderColor: focused ? t.primary : t.glassBorder,
+          },
+        ]}
+      >
+        {Icon ? (
+          <Icon size={18} color={focused ? t.primary : t.textSubtle} />
+        ) : null}
+        {prefix ? (
+          <Text style={[styles.prefix, { color: t.textMuted }]}>{prefix}</Text>
+        ) : null}
+        <TextInput
+          accessibilityLabel={label}
+          placeholderTextColor={t.textSubtle}
+          {...props}
+          onFocus={e => {
+            setFocused(true);
+            props.onFocus?.(e);
+          }}
+          onBlur={e => {
+            setFocused(false);
+            props.onBlur?.(e);
+          }}
+          style={[
+            styles.input,
+            { color: t.text },
+            props.multiline && styles.inputMultiline,
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** Big centred amount entry used on add/edit screens. */
+export function AmountInput({
+  value,
+  onChangeText,
+  direction,
+  autoFocus,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  direction: Direction;
+  autoFocus?: boolean;
+}) {
+  const t = useTheme();
+  return (
+    <View style={styles.amountInputWrap}>
+      <Text style={[type.caption, { color: t.textMuted }]}>
+        {direction === 'credit' ? 'Amount received' : 'Amount spent'}
+      </Text>
+      <View style={styles.amountInputRow}>
+        <Text style={[styles.amountRupee, { color: t.textSubtle }]}>₹</Text>
+        <TextInput
+          accessibilityLabel="Amount in rupees"
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          placeholderTextColor={t.textSubtle}
+          autoFocus={autoFocus}
+          style={[
+            styles.amountInput,
+            { color: direction === 'credit' ? t.credit : t.text },
+          ]}
+        />
+      </View>
     </View>
   );
 }
@@ -216,31 +631,45 @@ export function Segmented<T extends string>({
   value,
   onChange,
 }: {
-  options: ReadonlyArray<{ value: T; label: string }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: LucideIcon }>;
   value: T;
   onChange: (value: T) => void;
 }) {
   const t = useTheme();
   return (
     <View
-      style={[styles.segmented, { backgroundColor: t.surfaceAlt }]}
+      style={[
+        styles.segmented,
+        { backgroundColor: t.glass, borderColor: t.glassBorder },
+      ]}
       accessibilityRole="radiogroup"
     >
       {options.map(option => {
         const selected = option.value === value;
+        const Icon = option.icon;
         return (
           <Pressable
             key={option.value}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
-            style={[styles.segment, selected && { backgroundColor: t.surface }]}
+            style={[
+              styles.segment,
+              selected && {
+                backgroundColor: t.glassStrong,
+                boxShadow: `0 2px 8px ${alpha(t.shadow, t.dark ? 0.4 : 0.1)}`,
+              },
+            ]}
           >
+            {Icon ? (
+              <Icon
+                size={16}
+                color={selected ? t.primary : t.textMuted}
+                strokeWidth={2.4}
+              />
+            ) : null}
             <Text
-              style={[
-                styles.segmentText,
-                { color: selected ? t.text : t.textMuted },
-              ]}
+              style={[type.label, { color: selected ? t.text : t.textMuted }]}
             >
               {option.label}
             </Text>
@@ -250,6 +679,181 @@ export function Segmented<T extends string>({
     </View>
   );
 }
+
+export function Chip({
+  label,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  label: string;
+  icon?: LucideIcon;
+  tone?: 'neutral' | 'warning' | 'primary' | 'success';
+}) {
+  const t = useTheme();
+  const color =
+    tone === 'warning'
+      ? t.warning
+      : tone === 'primary'
+      ? t.primary
+      : tone === 'success'
+      ? t.credit
+      : t.textMuted;
+  return (
+    <View style={[styles.chip, { backgroundColor: alpha(color, 0.12) }]}>
+      {Icon ? <Icon size={12} color={color} strokeWidth={2.6} /> : null}
+      <Text style={[styles.chipText, { color }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Kept for existing call sites. */
+export const Pill = ({
+  label,
+  tone = 'neutral',
+}: {
+  label: string;
+  tone?: 'neutral' | 'warning';
+}) => <Chip label={label} tone={tone} />;
+
+export function ListRow({
+  icon,
+  iconColor,
+  leading,
+  title,
+  subtitle,
+  right,
+  onPress,
+  accessibilityLabel,
+  chevron,
+}: {
+  icon?: LucideIcon;
+  iconColor?: string;
+  leading?: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  chevron?: boolean;
+}) {
+  const t = useTheme();
+  const content = (
+    <>
+      {leading ??
+        (icon ? (
+          <IconBadge icon={icon} color={iconColor ?? t.primary} size={40} />
+        ) : null)}
+      <View style={styles.rowText}>
+        <Text style={[type.label, { color: t.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={[type.caption, { color: t.textMuted }]}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {right}
+      {chevron ? <ChevronRight size={18} color={t.textSubtle} /> : null}
+    </>
+  );
+  if (!onPress) {
+    return <View style={styles.listRow}>{content}</View>;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      onPress={onPress}
+      style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+export function ToggleRow({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+  value,
+  onChange,
+  disabled,
+}: {
+  icon: LucideIcon;
+  iconColor?: string;
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  const t = useTheme();
+  return (
+    <ListRow
+      icon={icon}
+      iconColor={iconColor}
+      title={title}
+      subtitle={subtitle}
+      right={
+        <Switch
+          accessibilityLabel={title}
+          value={value}
+          onValueChange={onChange}
+          disabled={disabled}
+          thumbColor="#FFFFFF"
+          trackColor={{ true: t.primary, false: alpha(t.textSubtle, 0.4) }}
+        />
+      }
+    />
+  );
+}
+
+export function Divider() {
+  const t = useTheme();
+  return <View style={[styles.divider, { backgroundColor: t.hairline }]} />;
+}
+
+export function SelectRow({
+  label,
+  value,
+  leading,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  leading?: React.ReactNode;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <View style={styles.field}>
+      <Text style={[type.caption, styles.fieldLabel, { color: t.textMuted }]}>
+        {label}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}. Change`}
+        onPress={onPress}
+        style={[
+          styles.inputWrap,
+          { backgroundColor: t.glassStrong, borderColor: t.glassBorder },
+        ]}
+      >
+        {leading}
+        <Text style={[type.body, styles.flex, { color: t.text }]}>{value}</Text>
+        <ChevronRight size={18} color={t.textSubtle} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sheets and states
 
 export function CategoryPicker({
   visible,
@@ -265,6 +869,7 @@ export function CategoryPicker({
   onClose: () => void;
 }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       visible={visible}
@@ -277,40 +882,76 @@ export function CategoryPicker({
         onPress={onClose}
         accessibilityLabel="Close category list"
       />
-      <View style={[styles.sheet, { backgroundColor: t.surface }]}>
-        <Text style={[styles.section, { color: t.textMuted }]}>
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: t.sheet,
+            paddingBottom: insets.bottom + spacing.lg,
+          },
+        ]}
+      >
+        <View style={[styles.grabber, { backgroundColor: t.hairline }]} />
+        <Text style={[type.h3, styles.sheetTitle, { color: t.text }]}>
           Choose a category
         </Text>
         <FlatList
           data={categories}
+          numColumns={3}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={item.name}
-              accessibilityState={{ selected: item.id === selectedId }}
-              onPress={() => onSelect(item.id)}
-              style={[
-                styles.sheetRow,
-                item.id === selectedId && { backgroundColor: t.surfaceAlt },
-              ]}
-            >
-              <Text style={styles.icon}>{item.icon}</Text>
-              <Text style={[styles.body, { color: t.text }]}>{item.name}</Text>
-            </Pressable>
-          )}
+          columnWrapperStyle={styles.gridRow}
+          renderItem={({ item }) => {
+            const selected = item.id === selectedId;
+            const { color } = categoryVisual(item.id);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.name}
+                accessibilityState={{ selected }}
+                onPress={() => onSelect(item.id)}
+                style={[
+                  styles.gridTile,
+                  {
+                    borderColor: selected ? color : t.hairline,
+                    backgroundColor: selected
+                      ? alpha(color, 0.1)
+                      : 'transparent',
+                  },
+                ]}
+              >
+                <CategoryBadge id={item.id} size={42} />
+                <Text
+                  style={[type.caption, styles.tileLabel, { color: t.text }]}
+                  numberOfLines={2}
+                >
+                  {item.name}
+                </Text>
+              </Pressable>
+            );
+          }}
         />
       </View>
     </Modal>
   );
 }
 
-export function Empty({ title, message }: { title: string; message: string }) {
+export function Empty({
+  title,
+  message,
+  icon,
+}: {
+  title: string;
+  message: string;
+  icon?: LucideIcon;
+}) {
   const t = useTheme();
   return (
     <View style={styles.empty}>
-      <Text style={[styles.emptyTitle, { color: t.text }]}>{title}</Text>
-      <Text style={[styles.body, styles.center, { color: t.textMuted }]}>
+      {icon ? <IconBadge icon={icon} color={t.primary} size={72} /> : null}
+      <Text style={[type.h2, styles.emptyTitle, { color: t.text }]}>
+        {title}
+      </Text>
+      <Text style={[type.body, styles.center, { color: t.textMuted }]}>
         {message}
       </Text>
     </View>
@@ -318,85 +959,159 @@ export function Empty({ title, message }: { title: string; message: string }) {
 }
 
 export const styles = StyleSheet.create({
-  card: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.lg,
+  flex: { flex: 1 },
+  center: { textAlign: 'center' },
+  bold: { fontWeight: '700' },
+  paragraph: { marginBottom: spacing.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  headerTextWithBack: { marginLeft: spacing.xs },
+  titleGap: { marginBottom: spacing.md },
+  glass: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
     marginBottom: spacing.md,
   },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: spacing.md },
-  section: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  hero: {
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+  },
+  heroSheen: {
+    position: 'absolute',
+    top: -80,
+    right: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
-  body: { fontSize: 16, lineHeight: 22 },
-  paragraph: { marginBottom: spacing.sm },
+  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  badge: { alignItems: 'center', justifyContent: 'center' },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   button: {
-    minHeight: 48,
+    minHeight: 54,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
+    overflow: 'hidden',
   },
-  buttonText: { fontSize: 16, fontWeight: '600' },
+  buttonCompact: { minHeight: 44 },
+  buttonInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   field: { marginBottom: spacing.md },
-  fieldLabel: { fontSize: 13, marginBottom: spacing.xs },
-  input: {
-    minHeight: 48,
+  fieldLabel: { marginBottom: 6, marginLeft: spacing.xs, fontWeight: '600' },
+  inputWrap: {
+    minHeight: 52,
     borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    fontSize: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  amount: { fontSize: 17, fontWeight: '700' },
-  amountLarge: { fontSize: 32, fontWeight: '700' },
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
+  input: { flex: 1, fontSize: 16, paddingVertical: spacing.md },
+  inputMultiline: { minHeight: 120, textAlignVertical: 'top' },
+  prefix: { fontSize: 16, fontWeight: '600' },
+  amountInputWrap: { alignItems: 'center', paddingVertical: spacing.lg },
+  amountInputRow: { flexDirection: 'row', alignItems: 'center' },
+  amountRupee: { fontSize: 34, fontWeight: '700', marginRight: 4 },
+  amountInput: {
+    fontSize: 48,
+    fontWeight: '800',
+    letterSpacing: -1,
+    minWidth: 80,
+    textAlign: 'center',
+    paddingVertical: 0,
   },
-  pillText: { fontSize: 12, fontWeight: '600' },
   segmented: {
     flexDirection: 'row',
     borderRadius: radius.md,
-    padding: 3,
+    borderWidth: 1,
+    padding: 4,
     marginBottom: spacing.md,
   },
   segment: {
     flex: 1,
     minHeight: 44,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
+    borderRadius: radius.sm + 2,
   },
-  segmentText: { fontSize: 15, fontWeight: '600' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: {
-    maxHeight: '70%',
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  sheetRow: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
+    gap: 4,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
   },
-  icon: { fontSize: 20, width: 36 },
-  empty: {
+  chipText: { fontSize: 11, fontWeight: '700' },
+  listRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 48,
+    gap: spacing.md,
+    minHeight: 60,
+    paddingVertical: spacing.sm,
+  },
+  rowText: { flex: 1, gap: 2 },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.xs },
+  backdrop: { flex: 1, backgroundColor: 'rgba(5,6,15,0.45)' },
+  sheet: {
+    maxHeight: '75%',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.lg,
   },
-  emptyTitle: { fontSize: 18, fontWeight: '700', marginBottom: spacing.sm },
-  center: { textAlign: 'center' },
+  grabber: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+  },
+  sheetTitle: { marginVertical: spacing.lg },
+  gridRow: { gap: spacing.sm, marginBottom: spacing.sm },
+  gridTile: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    gap: spacing.sm,
+  },
+  tileLabel: { textAlign: 'center', fontWeight: '600' },
+  empty: {
+    alignItems: 'center',
+    paddingVertical: 56,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  emptyTitle: { marginTop: spacing.md },
 });

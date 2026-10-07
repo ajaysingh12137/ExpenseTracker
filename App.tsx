@@ -4,6 +4,7 @@ import {
   NavigationContainer,
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useEffect, useRef } from 'react';
 import {
@@ -11,7 +12,6 @@ import {
   AppState,
   StatusBar,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -31,45 +31,48 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { OverviewScreen } from './src/screens/OverviewScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useAppStore } from './src/state/store';
+import { AppBackground } from './src/ui/components';
+import { GlassTabBar } from './src/ui/GlassTabBar';
 import { useTheme } from './src/ui/theme';
 import { useDbQuery } from './src/ui/useDbQuery';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 const Tab = createBottomTabNavigator<TabParamList>();
 
 /** Re-lock when the app has been in the background longer than this. */
 const RELOCK_AFTER_MS = 60 * 1000;
 
-const tabIcon = (glyph: string) => () =>
-  <Text style={styles.tabIcon}>{glyph}</Text>;
-
 function Tabs() {
   const drafts = useDbQuery(countDrafts, []);
   return (
-    <Tab.Navigator screenOptions={{ headerTitleAlign: 'left' }}>
+    <Tab.Navigator
+      // Screens draw their own headers; the bar floats over content (see GlassTabBar).
+      screenOptions={{ headerShown: false }}
+      tabBar={renderTabBar}
+    >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: 'Home', tabBarIcon: tabIcon('🏠') }}
+        options={{ title: 'Home' }}
       />
       <Tab.Screen
         name="Inbox"
         component={InboxScreen}
         options={{
           title: 'Inbox',
-          tabBarIcon: tabIcon('📥'),
           tabBarBadge: drafts.data ? drafts.data : undefined,
         }}
       />
       <Tab.Screen
         name="Overview"
         component={OverviewScreen}
-        options={{ title: 'Overview', tabBarIcon: tabIcon('📊') }}
+        options={{ title: 'Insights' }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{ title: 'Settings', tabBarIcon: tabIcon('⚙️') }}
+        options={{ title: 'Settings' }}
       />
     </Tab.Navigator>
   );
@@ -78,37 +81,25 @@ function Tabs() {
 function MainApp() {
   return (
     <CaptureProvider>
-      <Stack.Navigator>
-        <Stack.Screen
-          name="Tabs"
-          component={Tabs}
-          options={{ headerShown: false }}
-        />
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
+      >
+        <Stack.Screen name="Tabs" component={Tabs} />
         <Stack.Screen
           name="EditTransaction"
           component={EditTransactionScreen}
-          options={{ title: 'Edit expense' }}
         />
         <Stack.Screen
           name="AddTransaction"
           component={AddTransactionScreen}
-          options={{ title: 'Add expense' }}
+          options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
           name="CategoryTransactions"
           component={CategoryTransactionsScreen}
-          options={({ route }) => ({ title: route.params.name })}
         />
-        <Stack.Screen
-          name="CaptureSources"
-          component={CaptureSourcesScreen}
-          options={{ title: 'Apps to read from' }}
-        />
-        <Stack.Screen
-          name="BatteryGuide"
-          component={BatteryGuideScreen}
-          options={{ title: 'Battery settings' }}
-        />
+        <Stack.Screen name="CaptureSources" component={CaptureSourcesScreen} />
+        <Stack.Screen name="BatteryGuide" component={BatteryGuideScreen} />
       </Stack.Navigator>
     </CaptureProvider>
   );
@@ -151,7 +142,8 @@ function Root() {
 
   if (onboarded === null) {
     return (
-      <View style={[styles.center, { backgroundColor: t.bg }]}>
+      <View style={styles.center}>
+        <AppBackground />
         <ActivityIndicator color={t.primary} />
       </View>
     );
@@ -174,9 +166,9 @@ export default function App() {
       ...base.colors,
       primary: t.primary,
       background: t.bg,
-      card: t.surface,
+      card: t.bg,
       text: t.text,
-      border: t.border,
+      border: t.hairline,
     },
   };
   return (
@@ -191,5 +183,4 @@ export default function App() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabIcon: { fontSize: 20 },
 });

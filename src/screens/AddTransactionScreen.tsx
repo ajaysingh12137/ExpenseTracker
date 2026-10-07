@@ -1,6 +1,15 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  Mic,
+  StickyNote,
+  Store,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { keywordCategory, normalizeMerchant } from '../categories/categorize';
 import { addManualTransaction, getCategories } from '../db/repository';
 import { parseDayInput, toDayInput } from '../domain/dates';
@@ -10,14 +19,18 @@ import { startVoiceInput } from '../device/deviceServices';
 import type { RootStackParamList } from '../navigation/types';
 import { parseVoiceText } from '../parser/voiceParser';
 import {
-  Body,
+  AmountInput,
   Button,
+  CategoryBadge,
   CategoryPicker,
   Field,
+  GlassCard,
+  IconBadge,
   Screen,
   Segmented,
+  SelectRow,
 } from '../ui/components';
-import { spacing, useTheme } from '../ui/theme';
+import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddTransaction'>;
@@ -102,7 +115,7 @@ export function AddTransactionScreen({ route, navigation }: Props) {
         amountPaise,
         direction,
         merchant: merchant.trim() || null,
-        categoryId: categoryId,
+        categoryId,
         occurredAt,
         note: note.trim() || null,
       });
@@ -113,63 +126,91 @@ export function AddTransactionScreen({ route, navigation }: Props) {
   };
 
   return (
-    <Screen>
-      <Button label="🎤 Speak it" variant="secondary" onPress={listen} />
-      {heard && <Body muted>Heard: “{heard}”. Check the fields below.</Body>}
-      <Body muted>
-        Voice uses your phone's speech service, which may process audio online.
-      </Body>
+    <Screen
+      onBack={navigation.goBack}
+      title="Add expense"
+      subtitle="Cash or anything missed"
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Speak the expense"
+        onPress={listen}
+        style={({ pressed }) => [
+          styles.voice,
+          {
+            backgroundColor: alpha('#14B8A6', t.dark ? 0.16 : 0.1),
+            borderColor: alpha('#14B8A6', 0.3),
+            opacity: pressed ? 0.8 : 1,
+          },
+        ]}
+      >
+        <IconBadge icon={Mic} color="#14B8A6" solid size={44} />
+        <View style={styles.flex}>
+          <Text style={[type.label, { color: t.text }]}>Speak it</Text>
+          <Text
+            style={[type.caption, { color: t.textMuted }]}
+            numberOfLines={2}
+          >
+            {heard
+              ? `Heard: “${heard}”`
+              : '“Spent 250 on lunch at Cafe Coffee”'}
+          </Text>
+        </View>
+      </Pressable>
+
       <Segmented
         options={[
-          { value: 'debit', label: 'Spent' },
-          { value: 'credit', label: 'Received' },
+          { value: 'debit', label: 'Spent', icon: ArrowUpRight },
+          { value: 'credit', label: 'Received', icon: ArrowDownLeft },
         ]}
         value={direction}
         onChange={setDirection}
       />
-      <Field
-        label="Amount (₹)"
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="0"
-        autoFocus={route.params?.voice !== true}
-      />
-      <Field
-        label={direction === 'credit' ? 'From' : 'Paid to'}
-        value={merchant}
-        onChangeText={setMerchant}
-        placeholder="e.g. Vegetable vendor"
-      />
-      <Text style={[styles.label, { color: t.textMuted }]}>Category</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Category: ${
-          category?.name ?? 'Uncategorized'
-        }. Change`}
-        onPress={() => setPicker(true)}
-        style={[
-          styles.select,
-          { borderColor: t.border, backgroundColor: t.surface },
-        ]}
-      >
-        <Text style={[styles.selectText, { color: t.text }]}>
-          {category?.icon} {category?.name ?? 'Uncategorized'}
-        </Text>
-      </Pressable>
-      <Field
-        label="Date (DD-MM-YYYY)"
-        value={day}
-        onChangeText={setDay}
-        keyboardType="numbers-and-punctuation"
-      />
-      <Field
-        label="Note"
-        value={note}
-        onChangeText={setNote}
-        placeholder="Optional"
-      />
-      <Button label="Save" onPress={save} busy={busy} />
+
+      <GlassCard>
+        <AmountInput
+          value={amount}
+          onChangeText={setAmount}
+          direction={direction}
+          autoFocus={route.params?.voice !== true}
+        />
+      </GlassCard>
+
+      <GlassCard>
+        <Field
+          label={direction === 'credit' ? 'From' : 'Paid to'}
+          icon={Store}
+          value={merchant}
+          onChangeText={setMerchant}
+          placeholder="e.g. Vegetable vendor"
+        />
+        <SelectRow
+          label={categoryId ? 'Category' : 'Category (suggested)'}
+          value={category?.name ?? 'Uncategorized'}
+          leading={<CategoryBadge id={effectiveCategory} size={30} />}
+          onPress={() => setPicker(true)}
+        />
+        <Field
+          label="Date (DD-MM-YYYY)"
+          icon={CalendarDays}
+          value={day}
+          onChangeText={setDay}
+          keyboardType="numbers-and-punctuation"
+        />
+        <Field
+          label="Note"
+          icon={StickyNote}
+          value={note}
+          onChangeText={setNote}
+          placeholder="Optional"
+        />
+      </GlassCard>
+
+      <Button label="Save expense" icon={Check} onPress={save} busy={busy} />
+      <Text style={[type.caption, styles.footnote, { color: t.textSubtle }]}>
+        Voice uses your phone's speech service, which may process audio online.
+      </Text>
+
       <CategoryPicker
         visible={picker}
         categories={categories.data ?? []}
@@ -185,14 +226,15 @@ export function AddTransactionScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 13, marginBottom: spacing.xs },
-  select: {
-    minHeight: 48,
+  flex: { flex: 1 },
+  voice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderRadius: 8,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+    padding: spacing.md,
     marginBottom: spacing.md,
   },
-  selectText: { fontSize: 16 },
+  footnote: { textAlign: 'center', marginTop: spacing.md },
 });

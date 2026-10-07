@@ -2,33 +2,57 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  BellRing,
+  ChartPie,
+  Inbox,
+  Mic,
+  PauseCircle,
+  Plus,
+  Receipt,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCaptureStatus } from '../capture/CaptureProvider';
+import { countDrafts, listConfirmed, sumDebits } from '../db/repository';
 import {
-  countDrafts,
-  getCategories,
-  listConfirmed,
-  sumDebits,
-} from '../db/repository';
-import { dayRange, formatDateTime, monthRange } from '../domain/dates';
+  dayRange,
+  formatDateTime,
+  monthLabel,
+  monthRange,
+  shiftMonth,
+} from '../domain/dates';
 import { formatPaise } from '../domain/money';
 import type { RootStackParamList, TabParamList } from '../navigation/types';
 import {
-  Amount,
-  Body,
+  AmountText,
   Button,
-  Card,
-  SectionTitle,
+  CategoryBadge,
+  Divider,
+  Empty,
+  GlassCard,
+  HeroCard,
+  IconBadge,
+  IconButton,
+  ListRow,
   Screen,
+  SectionTitle,
 } from '../ui/components';
-import { spacing, useTheme } from '../ui/theme';
+import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Home'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
@@ -37,134 +61,279 @@ export function HomeScreen() {
   const now = new Date();
   const [todayFrom, todayTo] = dayRange(now);
   const [monthFrom, monthTo] = monthRange(now.getFullYear(), now.getMonth());
+  const prev = shiftMonth(now.getFullYear(), now.getMonth(), -1);
+  const [prevFrom] = monthRange(prev.year, prev.month);
+  // Same point in last month, so the comparison is fair mid-month.
+  const prevSameDay = Math.min(prevFrom + (Date.now() - monthFrom), monthFrom);
 
   const today = useDbQuery(() => sumDebits(todayFrom, todayTo), [todayFrom]);
   const month = useDbQuery(() => sumDebits(monthFrom, monthTo), [monthFrom]);
+  const lastMonthToDate = useDbQuery(
+    () => sumDebits(prevFrom, prevSameDay),
+    [prevFrom, todayFrom],
+  );
   const drafts = useDbQuery(countDrafts, []);
   const recent = useDbQuery(
     () => listConfirmed({ from: monthFrom - 60 * 864e5, to: todayTo }),
     [monthFrom, todayTo],
   );
-  const categories = useDbQuery(getCategories, []);
+
+  const current = month.data ?? 0;
+  const previous = lastMonthToDate.data ?? 0;
+  const change =
+    previous > 0 ? Math.round(((current - previous) / previous) * 100) : null;
+  const pending = drafts.data ?? 0;
 
   return (
-    <Screen>
+    <Screen
+      tabs
+      subtitle={greeting()}
+      title="Your money"
+      right={
+        <IconButton
+          icon={Mic}
+          label="Add expense by voice"
+          onPress={() => navigation.navigate('AddTransaction', { voice: true })}
+        />
+      }
+    >
       {status.permissionGranted === false && (
-        <Card style={{ borderColor: t.warning }}>
-          <Body>
-            ⚠️ Notification access is off, so payments are not being captured.
-          </Body>
-          <Button label="Turn it on" onPress={status.openSettings} />
-        </Card>
+        <GlassCard strong>
+          <ListRow
+            icon={BellRing}
+            iconColor={t.warning}
+            title="Capture is not running"
+            subtitle="Allow notification access so payments are logged automatically."
+          />
+          <Button label="Allow access" compact onPress={status.openSettings} />
+        </GlassCard>
       )}
       {status.captureEnabled === false && (
-        <Card style={{ borderColor: t.warning }}>
-          <Body>
-            Capture is paused. Turn it on in Settings to log payments
-            automatically.
-          </Body>
-        </Card>
+        <GlassCard strong>
+          <ListRow
+            icon={PauseCircle}
+            iconColor={t.warning}
+            title="Capture is paused"
+            subtitle="Turn it back on in Settings to log payments automatically."
+            onPress={() => navigation.navigate('Settings')}
+            chevron
+          />
+        </GlassCard>
       )}
-      <View style={styles.totals}>
-        <Card style={styles.flex}>
-          <Text style={[styles.label, { color: t.textMuted }]}>
-            Spent today
-          </Text>
-          <Text style={[styles.total, { color: t.text }]}>
-            {formatPaise(today.data ?? 0)}
-          </Text>
-        </Card>
-        <Card style={styles.flex}>
-          <Text style={[styles.label, { color: t.textMuted }]}>This month</Text>
-          <Text style={[styles.total, { color: t.text }]}>
-            {formatPaise(month.data ?? 0)}
-          </Text>
-        </Card>
-      </View>
-      <Text style={[styles.note, { color: t.textMuted }]}>
-        Totals include confirmed expenses only.
-      </Text>
 
-      {(drafts.data ?? 0) > 0 && (
-        <Button
-          label={`Review ${drafts.data} new ${
-            drafts.data === 1 ? 'payment' : 'payments'
-          }`}
-          onPress={() => navigation.navigate('Inbox')}
+      <HeroCard>
+        <Text style={[type.overline, styles.heroLabel]}>
+          Spent in {monthLabel(now.getFullYear(), now.getMonth())}
+        </Text>
+        <AmountText
+          paise={current}
+          direction="debit"
+          size="xl"
+          color="#FFFFFF"
         />
+        {change !== null ? (
+          <View style={styles.heroTrend}>
+            {change > 0 ? (
+              <TrendingUp size={16} color="#FFFFFF" strokeWidth={2.5} />
+            ) : (
+              <TrendingDown size={16} color="#FFFFFF" strokeWidth={2.5} />
+            )}
+            <Text style={styles.heroTrendText}>
+              {Math.abs(change)}% {change > 0 ? 'more' : 'less'} than this point
+              last month
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>Today</Text>
+            <Text style={styles.heroStatValue}>
+              {formatPaise(today.data ?? 0)}
+            </Text>
+          </View>
+          <View style={styles.heroDivider} />
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>To review</Text>
+            <Text style={styles.heroStatValue}>{pending}</Text>
+          </View>
+        </View>
+      </HeroCard>
+
+      {pending > 0 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Review ${pending} new payments`}
+          onPress={() => navigation.navigate('Inbox')}
+          style={({ pressed }) => [
+            styles.reviewCard,
+            {
+              backgroundColor: alpha(t.primary, t.dark ? 0.18 : 0.1),
+              borderColor: alpha(t.primary, 0.3),
+              opacity: pressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <IconBadge icon={Inbox} color={t.primary} solid size={40} />
+          <View style={styles.flex}>
+            <Text style={[type.label, { color: t.text }]}>
+              {pending} new {pending === 1 ? 'payment' : 'payments'} to review
+            </Text>
+            <Text style={[type.caption, { color: t.textMuted }]}>
+              Swipe to confirm in seconds
+            </Text>
+          </View>
+          <Text style={[type.label, { color: t.primary }]}>Review</Text>
+        </Pressable>
       )}
+
       <View style={styles.actions}>
-        <View style={styles.flex}>
-          <Button
-            label="+ Add expense"
-            variant="secondary"
-            onPress={() => navigation.navigate('AddTransaction')}
-          />
-        </View>
-        <View style={styles.flex}>
-          <Button
-            label="🎤 Voice"
-            variant="secondary"
-            onPress={() =>
-              navigation.navigate('AddTransaction', { voice: true })
-            }
-          />
-        </View>
+        <QuickAction
+          icon={Plus}
+          label="Add"
+          color={t.primary}
+          onPress={() => navigation.navigate('AddTransaction')}
+        />
+        <QuickAction
+          icon={Mic}
+          label="Voice"
+          color="#14B8A6"
+          onPress={() => navigation.navigate('AddTransaction', { voice: true })}
+        />
+        <QuickAction
+          icon={ChartPie}
+          label="Insights"
+          color="#EC4899"
+          onPress={() => navigation.navigate('Overview')}
+        />
       </View>
 
-      <SectionTitle>Recent</SectionTitle>
-      {(recent.data ?? []).length === 0 ? (
-        <Body muted>Confirmed expenses will show here.</Body>
-      ) : (
-        (recent.data ?? []).slice(0, 8).map(tx => {
-          const category = categories.data?.find(c => c.id === tx.categoryId);
-          return (
-            <Pressable
-              key={tx.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${
-                tx.merchantName ?? 'Unknown'
-              }, ${formatPaise(tx.amountPaise)}. Edit`}
-              onPress={() =>
-                navigation.navigate('EditTransaction', { id: tx.id })
-              }
-              style={[styles.row, { borderBottomColor: t.border }]}
-            >
-              <Text style={styles.icon}>{category?.icon ?? '❓'}</Text>
-              <View style={styles.flex}>
-                <Text
-                  style={[styles.name, { color: t.text }]}
-                  numberOfLines={1}
-                >
-                  {tx.merchantName ?? 'Unknown'}
-                </Text>
-                <Text style={[styles.meta, { color: t.textMuted }]}>
-                  {formatDateTime(tx.occurredAt)}
-                </Text>
-              </View>
-              <Amount paise={tx.amountPaise} direction={tx.direction} />
-            </Pressable>
-          );
-        })
-      )}
+      <SectionTitle
+        action={{
+          label: 'See all',
+          onPress: () => navigation.navigate('Overview'),
+        }}
+      >
+        Recent
+      </SectionTitle>
+      <GlassCard>
+        {(recent.data ?? []).length === 0 ? (
+          <Empty
+            icon={Receipt}
+            title="No expenses yet"
+            message="Make a UPI payment or add one by hand. Confirmed expenses show up here."
+          />
+        ) : (
+          (recent.data ?? []).slice(0, 6).map((tx, index) => (
+            <View key={tx.id}>
+              {index > 0 && <Divider />}
+              <ListRow
+                leading={<CategoryBadge id={tx.categoryId} size={40} />}
+                title={tx.merchantName ?? 'Unknown payee'}
+                subtitle={formatDateTime(tx.occurredAt)}
+                right={
+                  <AmountText paise={tx.amountPaise} direction={tx.direction} />
+                }
+                accessibilityLabel={`${
+                  tx.merchantName ?? 'Unknown'
+                }, ${formatPaise(tx.amountPaise)}. Edit`}
+                onPress={() =>
+                  navigation.navigate('EditTransaction', { id: tx.id })
+                }
+              />
+            </View>
+          ))
+        )}
+      </GlassCard>
     </Screen>
   );
 }
 
+function QuickAction({
+  icon,
+  label,
+  color,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.action,
+        {
+          backgroundColor: t.glass,
+          borderColor: t.glassBorder,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+        },
+      ]}
+    >
+      <IconBadge icon={icon} color={color} size={42} />
+      <Text style={[type.caption, styles.actionLabel, { color: t.text }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  totals: { flexDirection: 'row', gap: spacing.md },
   flex: { flex: 1 },
-  label: { fontSize: 13 },
-  total: { fontSize: 24, fontWeight: '700', marginTop: spacing.xs },
-  note: { fontSize: 12, marginBottom: spacing.sm },
-  actions: { flexDirection: 'row', gap: spacing.md },
-  row: {
+  heroLabel: { color: 'rgba(255,255,255,0.8)', marginBottom: spacing.xs },
+  heroTrend: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: spacing.sm,
   },
-  icon: { fontSize: 22, width: 40 },
-  name: { fontSize: 16, fontWeight: '600' },
-  meta: { fontSize: 13 },
+  heroTrendText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  heroStats: {
+    flexDirection: 'row',
+    marginTop: spacing.xl,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+  },
+  heroStat: { flex: 1, alignItems: 'center' },
+  heroStatLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  heroStatValue: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  heroDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.25)' },
+  reviewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  actions: { flexDirection: 'row', gap: spacing.md },
+  action: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingVertical: spacing.lg,
+  },
+  actionLabel: { fontWeight: '700' },
 });

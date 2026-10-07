@@ -1,6 +1,21 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Ban,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  CopyCheck,
+  MessageSquareText,
+  Save,
+  Sparkles,
+  StickyNote,
+  Store,
+  Trash,
+} from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   getCategories,
   getRawText,
@@ -13,17 +28,21 @@ import { formatPaise, parseRupeesToPaise } from '../domain/money';
 import type { Direction, Transaction } from '../domain/types';
 import type { RootStackParamList } from '../navigation/types';
 import {
+  AmountInput,
   Body,
   Button,
-  Card,
+  CategoryBadge,
   CategoryPicker,
+  Chip,
   Field,
-  Pill,
+  GlassCard,
+  IconBadge,
   Screen,
   SectionTitle,
   Segmented,
+  SelectRow,
 } from '../ui/components';
-import { spacing, useTheme } from '../ui/theme';
+import { spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditTransaction'>;
@@ -74,9 +93,10 @@ export function EditTransactionScreen({ route, navigation }: Props) {
   }, [id, navigation]);
 
   if (!tx) {
-    return <Screen>{null}</Screen>;
+    return <Screen onBack={navigation.goBack}>{null}</Screen>;
   }
 
+  const isDraft = tx.status === 'draft';
   const category = categories.data?.find(c => c.id === categoryId);
 
   const save = async (confirm: boolean) => {
@@ -122,93 +142,124 @@ export function EditTransactionScreen({ route, navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <Screen
+      onBack={navigation.goBack}
+      title={isDraft ? 'Review payment' : 'Edit expense'}
+      subtitle={formatDateTime(tx.occurredAt)}
+    >
       {duplicate && (
-        <Card>
-          <Pill label="Possible duplicate" tone="warning" />
-          <Body>
-            Looks like {formatPaise(duplicate.amountPaise)} to{' '}
-            {duplicate.merchantName ?? 'the same payee'} at{' '}
-            {formatDateTime(duplicate.occurredAt)}. If you paid twice, keep
-            both. If it is the same payment, ignore this one.
-          </Body>
-        </Card>
+        <GlassCard strong>
+          <View style={styles.rowTop}>
+            <IconBadge icon={CopyCheck} color={t.warning} size={40} />
+            <View style={styles.flex}>
+              <Text style={[type.label, { color: t.text }]}>
+                Possible duplicate
+              </Text>
+              <Text style={[type.caption, { color: t.textMuted }]}>
+                {formatPaise(duplicate.amountPaise)} to{' '}
+                {duplicate.merchantName ?? 'the same payee'} at{' '}
+                {formatDateTime(duplicate.occurredAt)}. Paid twice? Keep both.
+                Same payment? Ignore this one.
+              </Text>
+            </View>
+          </View>
+        </GlassCard>
       )}
+
       <Segmented
         options={[
-          { value: 'debit', label: 'Spent' },
-          { value: 'credit', label: 'Received' },
+          { value: 'debit', label: 'Spent', icon: ArrowUpRight },
+          { value: 'credit', label: 'Received', icon: ArrowDownLeft },
         ]}
         value={direction}
         onChange={setDirection}
       />
-      <Field
-        label="Amount (₹)"
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="0"
-      />
-      <Field
-        label={direction === 'credit' ? 'From' : 'Paid to'}
-        value={merchant}
-        onChangeText={setMerchant}
-      />
-      <Text style={[styles.label, { color: t.textMuted }]}>Category</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Category: ${
-          category?.name ?? 'Uncategorized'
-        }. Change`}
-        onPress={() => setPicker(true)}
-        style={[
-          styles.select,
-          { borderColor: t.border, backgroundColor: t.surface },
-        ]}
-      >
-        <Text style={[styles.selectText, { color: t.text }]}>
-          {category?.icon} {category?.name ?? 'Uncategorized'}
-        </Text>
-      </Pressable>
-      <Field
-        label="Date (DD-MM-YYYY)"
-        value={day}
-        onChangeText={setDay}
-        keyboardType="numbers-and-punctuation"
-      />
-      <Field
-        label="Note"
-        value={note}
-        onChangeText={setNote}
-        placeholder="Optional"
-      />
-      {merchant.trim() !== '' && (
-        <Body muted>
-          Changing the category also updates future payments to this payee.
-        </Body>
-      )}
 
-      {tx.status === 'draft' ? (
+      <GlassCard>
+        <AmountInput
+          value={amount}
+          onChangeText={setAmount}
+          direction={direction}
+        />
+      </GlassCard>
+
+      <GlassCard>
+        <Field
+          label={direction === 'credit' ? 'From' : 'Paid to'}
+          icon={Store}
+          value={merchant}
+          onChangeText={setMerchant}
+          placeholder="Payee name"
+        />
+        <SelectRow
+          label="Category"
+          value={category?.name ?? 'Uncategorized'}
+          leading={<CategoryBadge id={categoryId} size={30} />}
+          onPress={() => setPicker(true)}
+        />
+        <Field
+          label="Date (DD-MM-YYYY)"
+          icon={CalendarDays}
+          value={day}
+          onChangeText={setDay}
+          keyboardType="numbers-and-punctuation"
+        />
+        <Field
+          label="Note"
+          icon={StickyNote}
+          value={note}
+          onChangeText={setNote}
+          placeholder="Optional"
+        />
+        {merchant.trim() !== '' && (
+          <Chip
+            icon={Sparkles}
+            tone="primary"
+            label="Category changes apply to future payments to this payee"
+          />
+        )}
+      </GlassCard>
+
+      {isDraft ? (
         <>
-          <Button label="Confirm" onPress={() => save(true)} busy={busy} />
           <Button
-            label="Save, keep in inbox"
-            variant="secondary"
-            onPress={() => save(false)}
-            disabled={busy}
+            label="Confirm expense"
+            icon={Check}
+            onPress={() => save(true)}
+            busy={busy}
           />
-          <Button
-            label="Ignore (not an expense)"
-            variant="secondary"
-            onPress={ignore}
-            disabled={busy}
-          />
+          <View style={styles.buttonRow}>
+            <View style={styles.flex}>
+              <Button
+                label="Save draft"
+                icon={Save}
+                variant="secondary"
+                onPress={() => save(false)}
+                disabled={busy}
+              />
+            </View>
+            <View style={styles.flex}>
+              <Button
+                label="Not an expense"
+                icon={Ban}
+                variant="danger"
+                onPress={ignore}
+                disabled={busy}
+              />
+            </View>
+          </View>
         </>
       ) : (
         <>
-          <Button label="Save" onPress={() => save(false)} busy={busy} />
           <Button
-            label="Delete"
+            label="Save changes"
+            icon={Save}
+            onPress={() => save(false)}
+            busy={busy}
+          />
+          <Button
+            label="Delete expense"
+            icon={Trash}
             variant="danger"
             onPress={ignore}
             disabled={busy}
@@ -218,22 +269,34 @@ export function EditTransactionScreen({ route, navigation }: Props) {
 
       {raw && (
         <>
-          <SectionTitle>Original notification</SectionTitle>
+          <SectionTitle>Source</SectionTitle>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ expanded: showRaw }}
+            accessibilityLabel="Original notification"
             onPress={() => setShowRaw(v => !v)}
           >
-            <Card>
-              {showRaw ? (
-                <>
+            <GlassCard>
+              <View style={styles.rowCenter}>
+                <IconBadge
+                  icon={MessageSquareText}
+                  color={t.textMuted}
+                  size={36}
+                />
+                <Text style={[type.label, styles.flex, { color: t.text }]}>
+                  Original notification
+                </Text>
+                <View style={showRaw ? styles.rotated : undefined}>
+                  <ChevronDown size={18} color={t.textSubtle} />
+                </View>
+              </View>
+              {showRaw && (
+                <View style={styles.rawBody}>
                   <Body>{raw.title}</Body>
                   <Body muted>{raw.body}</Body>
-                </>
-              ) : (
-                <Body muted>Tap to show the text this was read from.</Body>
+                </View>
               )}
-            </Card>
+            </GlassCard>
           </Pressable>
         </>
       )}
@@ -253,14 +316,10 @@ export function EditTransactionScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 13, marginBottom: spacing.xs },
-  select: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderRadius: 8,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-  },
-  selectText: { fontSize: 16 },
+  flex: { flex: 1 },
+  rowTop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  rowCenter: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
+  buttonRow: { flexDirection: 'row', gap: spacing.sm },
+  rawBody: { marginTop: spacing.md },
+  rotated: { transform: [{ rotate: '180deg' }] },
 });

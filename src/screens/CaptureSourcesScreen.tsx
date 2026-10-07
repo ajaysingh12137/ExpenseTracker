@@ -1,12 +1,28 @@
+import { useNavigation } from '@react-navigation/native';
+import {
+  Info,
+  Landmark,
+  MessageSquareText,
+  RotateCcw,
+  Save,
+} from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   getCaptureConfig,
   resetCaptureConfig,
   setAllowedPackages,
   setSmsPackages,
 } from '../capture/transactionCapture';
-import { Body, Button, Field, Screen, SectionTitle } from '../ui/components';
+import {
+  Button,
+  Field,
+  GlassCard,
+  IconBadge,
+  Screen,
+  SectionTitle,
+} from '../ui/components';
+import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 
 const toLines = (values: ReadonlyArray<string>) => values.join('\n');
 const fromLines = (text: string) =>
@@ -20,6 +36,8 @@ const fromLines = (text: string) =>
  * lets them be corrected on a device without an app update.
  */
 export function CaptureSourcesScreen() {
+  const navigation = useNavigation();
+  const t = useTheme();
   const [apps, setApps] = useState('');
   const [sms, setSms] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,33 +67,64 @@ export function CaptureSourcesScreen() {
   };
 
   return (
-    <Screen>
-      <Body muted>
-        Android package names, one per line. Only notifications from these apps
-        are ever read. To find a name: Play Store page URL (id=…) or `adb shell
-        pm list packages`.
-      </Body>
+    <Screen
+      onBack={navigation.goBack}
+      title="Apps to read from"
+      subtitle="Advanced"
+    >
+      <View
+        style={[
+          styles.note,
+          { backgroundColor: alpha(t.primary, t.dark ? 0.14 : 0.08) },
+        ]}
+      >
+        <Info size={18} color={t.primary} />
+        <Text style={[type.caption, styles.flex, { color: t.textMuted }]}>
+          Android package names, one per line. Only notifications from these
+          apps are ever read. Find a name in the app's Play Store link (id=…).
+        </Text>
+      </View>
+
       <SectionTitle>Bank and UPI apps</SectionTitle>
-      <Field
-        label="Package names"
-        value={apps}
-        onChangeText={setApps}
-        multiline
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <SectionTitle>SMS apps (used only if bank SMS is on)</SectionTitle>
-      <Field
-        label="Package names"
-        value={sms}
-        onChangeText={setSms}
-        multiline
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Button label="Save" onPress={save} busy={busy} />
+      <GlassCard>
+        <View style={styles.cardHead}>
+          <IconBadge icon={Landmark} color="#8B5CF6" size={36} />
+          <Text style={[type.label, { color: t.text }]}>
+            {apps.split('\n').filter(Boolean).length} apps
+          </Text>
+        </View>
+        <Field
+          label="Package names"
+          value={apps}
+          onChangeText={setApps}
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </GlassCard>
+
+      <SectionTitle>SMS apps (only if bank SMS is on)</SectionTitle>
+      <GlassCard>
+        <View style={styles.cardHead}>
+          <IconBadge icon={MessageSquareText} color="#0EA5E9" size={36} />
+          <Text style={[type.label, { color: t.text }]}>
+            {sms.split('\n').filter(Boolean).length} apps
+          </Text>
+        </View>
+        <Field
+          label="Package names"
+          value={sms}
+          onChangeText={setSms}
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </GlassCard>
+
+      <Button label="Save" icon={Save} onPress={save} busy={busy} />
       <Button
         label="Restore defaults"
+        icon={RotateCcw}
         variant="secondary"
         onPress={reset}
         disabled={busy}
@@ -83,3 +132,20 @@ export function CaptureSourcesScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  note: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'flex-start',
+  },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+});

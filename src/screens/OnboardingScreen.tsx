@@ -1,5 +1,23 @@
+import {
+  ArrowRight,
+  BatteryCharging,
+  BellRing,
+  CircleCheck,
+  CloudUpload,
+  EyeOff,
+  FingerprintPattern,
+  Hand,
+  Landmark,
+  MessageSquareText,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  TriangleAlert,
+  Zap,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { AppState, StyleSheet, Switch, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import {
   isPermissionGranted,
   openPermissionSettings,
@@ -9,8 +27,17 @@ import {
 import { setSetting, SettingKeys } from '../db/settings';
 import { authenticate, canUseAppLock } from '../device/deviceServices';
 import { useAppStore } from '../state/store';
-import { Body, Button, Card, Screen, Title } from '../ui/components';
-import { spacing, useTheme } from '../ui/theme';
+import {
+  Body,
+  Button,
+  GlassCard,
+  GradientFill,
+  ListRow,
+  Screen,
+  ToggleRow,
+  Divider,
+} from '../ui/components';
+import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { BatteryGuideContent } from './BatteryGuideScreen';
 
 const STEPS = [
@@ -25,30 +52,30 @@ type Step = (typeof STEPS)[number];
 
 export function OnboardingScreen() {
   const [step, setStep] = useState<Step>('welcome');
+  const index = STEPS.indexOf(step);
   const next = useCallback(() => {
-    const index = STEPS.indexOf(step);
     setStep(STEPS[Math.min(index + 1, STEPS.length - 1)]);
-  }, [step]);
+  }, [index]);
+  const back =
+    index > 0 && step !== 'access'
+      ? () => setStep(STEPS[index - 1])
+      : undefined;
   const t = useTheme();
 
   return (
-    <Screen safeTop>
+    <Screen onBack={back}>
       <View
         style={styles.progress}
-        accessibilityLabel={`Step ${STEPS.indexOf(step) + 1} of ${
-          STEPS.length
-        }`}
+        accessibilityLabel={`Step ${index + 1} of ${STEPS.length}`}
       >
-        {STEPS.map(s => (
+        {STEPS.map((s, i) => (
           <View
             key={s}
             style={[
               styles.dot,
               {
                 backgroundColor:
-                  STEPS.indexOf(s) <= STEPS.indexOf(step)
-                    ? t.primary
-                    : t.border,
+                  i <= index ? t.primary : alpha(t.textSubtle, 0.25),
               },
             ]}
           />
@@ -64,26 +91,83 @@ export function OnboardingScreen() {
   );
 }
 
+function StepHero({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: LucideIcon;
+  title: string;
+  text: string;
+}) {
+  const t = useTheme();
+  return (
+    <View style={styles.hero}>
+      <View
+        style={[styles.heroRing, { backgroundColor: alpha(t.primary, 0.12) }]}
+      >
+        <View
+          style={[
+            styles.heroCircle,
+            { boxShadow: `0 12px 30px ${alpha(t.primary, 0.4)}` },
+          ]}
+        >
+          <GradientFill rounded={44} />
+          <Icon size={44} color="#FFFFFF" strokeWidth={2} />
+        </View>
+      </View>
+      <Text
+        accessibilityRole="header"
+        style={[type.title, styles.heroTitle, { color: t.text }]}
+      >
+        {title}
+      </Text>
+      <Text style={[type.body, styles.heroText, { color: t.textMuted }]}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 function Welcome({ onNext }: { onNext: () => void }) {
+  const t = useTheme();
   return (
     <>
-      <Title>Expenses, logged for you</Title>
-      <Body>
-        When you pay by UPI or card, your bank or payment app sends a
-        notification. This app reads those notifications, turns them into
-        expenses, and asks you to confirm each one with a swipe.
-      </Body>
-      <Body muted>
-        No typing for most transactions. Cash and anything missed can be added
-        by hand or by voice.
-      </Body>
-      <Button label="Get started" onPress={onNext} />
+      <StepHero
+        icon={Sparkles}
+        title="Expenses, logged for you"
+        text="Pay by UPI or card as usual. We turn the payment alert into an expense, and you confirm it with a swipe."
+      />
+      <GlassCard>
+        <ListRow
+          icon={Zap}
+          iconColor={t.primary}
+          title="Automatic"
+          subtitle="No typing for most payments"
+        />
+        <Divider />
+        <ListRow
+          icon={Hand}
+          iconColor="#14B8A6"
+          title="One swipe"
+          subtitle="Check and confirm in seconds"
+        />
+        <Divider />
+        <ListRow
+          icon={ShieldCheck}
+          iconColor="#EC4899"
+          title="Private"
+          subtitle="Your data stays on your phone"
+        />
+      </GlassCard>
+      <Button label="Get started" icon={ArrowRight} onPress={onNext} />
     </>
   );
 }
 
 /** Prominent disclosure: shown before notification access is requested (Play User Data policy). */
 function Privacy({ onNext }: { onNext: () => void }) {
+  const t = useTheme();
   const [busy, setBusy] = useState(false);
   const accept = async () => {
     setBusy(true);
@@ -94,40 +178,46 @@ function Privacy({ onNext }: { onNext: () => void }) {
   };
   return (
     <>
-      <Title>What this app reads</Title>
-      <Card>
-        <Body>
-          ✅ Notifications from the bank and payment apps on our list (for
-          example Google Pay, PhonePe, Paytm, BHIM and bank apps), and only ones
-          that look like a payment.
-        </Body>
-      </Card>
-      <Card>
-        <Body>
-          🚫 Never stored: one-time passwords (OTPs) and verification codes, and
-          notifications from any other app, including your chats. They are
-          checked on your phone and immediately discarded.
-        </Body>
-      </Card>
-      <Card>
-        <Body>
-          📱 Payment text is read and stored on your phone. Full account and
-          card numbers are cut to their last 4 digits before anything is saved.
-        </Body>
-      </Card>
-      <Card>
-        <Body>
-          ☁️ If the phone cannot understand a payment message, that message
-          (with numbers masked) is sent to our server to be read by an AI
-          service, and only the result comes back. Nothing else is uploaded.
-        </Body>
-      </Card>
-      <Body muted>
-        You can turn capture off at any time in Settings. Your data is not
-        included in phone backups.
+      <StepHero
+        icon={ShieldCheck}
+        title="What this app reads"
+        text="Please read this before giving access."
+      />
+      <GlassCard>
+        <ListRow
+          icon={Landmark}
+          iconColor={t.credit}
+          title="Payment alerts only"
+          subtitle="From bank and payment apps on our list (Google Pay, PhonePe, Paytm, BHIM, bank apps), and only ones that look like a payment."
+        />
+        <Divider />
+        <ListRow
+          icon={EyeOff}
+          iconColor={t.danger}
+          title="Never stored"
+          subtitle="OTPs, verification codes, and notifications from any other app, including your chats. They are checked on the phone and discarded."
+        />
+        <Divider />
+        <ListRow
+          icon={Smartphone}
+          iconColor="#0EA5E9"
+          title="Kept on your phone"
+          subtitle="Account and card numbers are cut to their last 4 digits before saving. Not included in phone backups."
+        />
+        <Divider />
+        <ListRow
+          icon={CloudUpload}
+          iconColor="#8B5CF6"
+          title="AI help for unclear messages"
+          subtitle="If the phone cannot read a payment message, that message (numbers masked) is sent to our server to be read by an AI service. Nothing else is uploaded."
+        />
+      </GlassCard>
+      <Body muted center>
+        You can turn capture off at any time in Settings.
       </Body>
       <Button
         label="I agree, continue"
+        icon={CircleCheck}
         onPress={accept}
         busy={busy}
         accessibilityHint="Turns on payment capture"
@@ -137,6 +227,7 @@ function Privacy({ onNext }: { onNext: () => void }) {
 }
 
 function Access({ onNext }: { onNext: () => void }) {
+  const t = useTheme();
   const [granted, setGranted] = useState(false);
   const check = useCallback(() => {
     isPermissionGranted().then(setGranted);
@@ -152,32 +243,43 @@ function Access({ onNext }: { onNext: () => void }) {
 
   return (
     <>
-      <Title>Allow notification access</Title>
-      <Body>
-        Android will show a screen listing apps that can read notifications.
-        Turn on "ExpenseTracker" there, then come back. Android shows a strong
-        warning on that screen; this app uses the access only as described on
-        the previous page.
-      </Body>
-      <Body muted>
-        If the switch is greyed out ("Restricted setting"), open App info → ⋮
-        menu → "Allow restricted settings", then try again. This happens when
-        the app was not installed from Google Play.
-      </Body>
+      <StepHero
+        icon={BellRing}
+        title="Allow notification access"
+        text='Android shows a list of apps that can read notifications. Turn on "ExpenseTracker", then come back here.'
+      />
       {granted ? (
         <>
-          <Card>
-            <Body>✅ Access granted.</Body>
-          </Card>
-          <Button label="Continue" onPress={onNext} />
+          <GlassCard strong>
+            <ListRow
+              icon={CircleCheck}
+              iconColor={t.credit}
+              title="Access granted"
+              subtitle="Payments will now be captured."
+            />
+          </GlassCard>
+          <Button label="Continue" icon={ArrowRight} onPress={onNext} />
         </>
       ) : (
         <>
+          <GlassCard>
+            <ListRow
+              icon={TriangleAlert}
+              iconColor={t.warning}
+              title="Switch greyed out?"
+              subtitle='Open App info → ⋮ menu → "Allow restricted settings", then try again. This happens when the app was not installed from Google Play.'
+            />
+          </GlassCard>
+          <Body muted center>
+            Android shows a strong warning on that screen. This app uses the
+            access only as described on the previous page.
+          </Body>
           <Button
             label="Open settings"
+            icon={ArrowRight}
             onPress={() => openPermissionSettings()}
           />
-          <Button label="Skip for now" variant="secondary" onPress={onNext} />
+          <Button label="Skip for now" variant="ghost" onPress={onNext} />
         </>
       )}
     </>
@@ -186,7 +288,6 @@ function Access({ onNext }: { onNext: () => void }) {
 
 function SmsOptIn({ onNext }: { onNext: () => void }) {
   const [enabled, setEnabled] = useState(false);
-  const t = useTheme();
   const toggle = async (value: boolean) => {
     setEnabled(value);
     await setSmsAppsEnabled(value);
@@ -196,31 +297,25 @@ function SmsOptIn({ onNext }: { onNext: () => void }) {
   };
   return (
     <>
-      <Title>Bank SMS (optional)</Title>
-      <Body>
-        Many banks send payment alerts by SMS rather than through their app. If
-        you turn this on, the app also reads notifications from your SMS app,
-        and keeps only messages that look like a payment.
+      <StepHero
+        icon={MessageSquareText}
+        title="Bank SMS (optional)"
+        text="Many banks send payment alerts by SMS. Turn this on to also read your SMS app's notifications, keeping only payment messages."
+      />
+      <GlassCard>
+        <ToggleRow
+          icon={MessageSquareText}
+          iconColor="#0EA5E9"
+          title="Read bank SMS alerts"
+          subtitle="OTPs and personal messages are never stored."
+          value={enabled}
+          onChange={toggle}
+        />
+      </GlassCard>
+      <Body muted center>
+        Off unless you turn it on. You can change this later in Settings.
       </Body>
-      <Body muted>
-        OTPs are still discarded. Other SMS, including personal messages, are
-        checked on the phone and never stored. This is off unless you turn it
-        on, and you can turn it off later in Settings.
-      </Body>
-      <Card>
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <Body>Read bank SMS alerts</Body>
-          </View>
-          <Switch
-            accessibilityLabel="Read bank SMS alerts"
-            value={enabled}
-            onValueChange={toggle}
-            trackColor={{ true: t.primary, false: t.border }}
-          />
-        </View>
-      </Card>
-      <Button label="Continue" onPress={onNext} />
+      <Button label="Continue" icon={ArrowRight} onPress={onNext} />
     </>
   );
 }
@@ -232,14 +327,13 @@ function Battery({ onNext }: { onNext: () => void }) {
   };
   return (
     <>
-      <Title>Keep capture running</Title>
-      <Body>
-        Some phones stop apps in the background to save battery, and payments
-        made then would be missed. Please change these settings now; it takes a
-        minute.
-      </Body>
+      <StepHero
+        icon={BatteryCharging}
+        title="Keep capture running"
+        text="Some phones stop apps in the background to save battery, and payments made then would be missed. This takes a minute."
+      />
       <BatteryGuideContent />
-      <Button label="I've done this" onPress={done} />
+      <Button label="I've done this" icon={CircleCheck} onPress={done} />
     </>
   );
 }
@@ -273,30 +367,31 @@ function AppLock() {
 
   return (
     <>
-      <Title>Lock the app</Title>
-      <Body>
-        Your spending is private. Require your fingerprint, face or phone PIN to
-        open the app.
-      </Body>
+      <StepHero
+        icon={FingerprintPattern}
+        title="Lock the app"
+        text="Your spending is private. Require your fingerprint, face or phone PIN to open the app."
+      />
       {available === false && (
-        <Body muted>
+        <Body muted center>
           Set a screen lock on your phone first to use app lock. You can turn it
           on later in Settings.
         </Body>
       )}
       <Button
         label="Turn on app lock"
+        icon={FingerprintPattern}
         onPress={() => finish(true)}
         disabled={!available}
         busy={busy}
       />
       <Button
         label="Not now"
-        variant="secondary"
+        variant="ghost"
         onPress={() => finish(false)}
         disabled={busy}
       />
-      <Body muted>
+      <Body muted center>
         Tip: make a small UPI payment to see your first expense appear in the
         Inbox.
       </Body>
@@ -305,8 +400,25 @@ function AppLock() {
 }
 
 const styles = StyleSheet.create({
-  progress: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.lg },
-  dot: { flex: 1, height: 4, borderRadius: 2 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  flex: { flex: 1 },
+  progress: { flexDirection: 'row', gap: 6, marginBottom: spacing.md },
+  dot: { flex: 1, height: 5, borderRadius: radius.pill },
+  hero: { alignItems: 'center', paddingVertical: spacing.lg },
+  heroRing: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+  },
+  heroCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  heroTitle: { textAlign: 'center', marginBottom: spacing.sm },
+  heroText: { textAlign: 'center', paddingHorizontal: spacing.md },
 });

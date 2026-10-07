@@ -1,15 +1,31 @@
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  CopyCheck,
+  Hand,
+  Inbox,
+  Sparkles,
+  TriangleAlert,
+  Undo2,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { getCategories, listDrafts, setStatus } from '../db/repository';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { listDrafts, setStatus } from '../db/repository';
 import { formatDateTime } from '../domain/dates';
 import { formatPaise } from '../domain/money';
 import type { Transaction } from '../domain/types';
 import type { RootStackParamList } from '../navigation/types';
-import { Amount, Empty, Pill } from '../ui/components';
+import {
+  AmountText,
+  CategoryBadge,
+  Chip,
+  Empty,
+  Screen,
+  TAB_BAR_SPACE,
+} from '../ui/components';
 import { SwipeRow } from '../ui/SwipeRow';
-import { spacing, useTheme } from '../ui/theme';
+import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -18,8 +34,8 @@ type UndoState = { id: number; message: string } | null;
 export function InboxScreen() {
   const navigation = useNavigation<Nav>();
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const drafts = useDbQuery(listDrafts, []);
-  const categories = useDbQuery(getCategories, []);
   const [undo, setUndo] = useState<UndoState>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,39 +80,53 @@ export function InboxScreen() {
     [showUndo],
   );
 
-  const categoryOf = (id: string) => categories.data?.find(c => c.id === id);
+  const count = drafts.data?.length ?? 0;
 
   return (
-    <View style={[styles.root, { backgroundColor: t.bg }]}>
+    <Screen
+      scroll={false}
+      title="Inbox"
+      subtitle={count > 0 ? `${count} to review` : 'Nothing pending'}
+    >
       <FlatList
         data={drafts.data ?? []}
         keyExtractor={item => String(item.id)}
-        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_SPACE }}
         ListHeaderComponent={
-          drafts.data && drafts.data.length > 0 ? (
-            <Text style={[styles.hint, { color: t.textMuted }]}>
-              Swipe right to confirm, left to ignore. Tap to edit.
-            </Text>
+          count > 0 ? (
+            <View
+              style={[
+                styles.hint,
+                { backgroundColor: alpha(t.primary, t.dark ? 0.16 : 0.08) },
+              ]}
+            >
+              <Hand size={16} color={t.primary} />
+              <Text style={[type.caption, styles.flex, { color: t.textMuted }]}>
+                Swipe right to confirm, left to ignore. Tap to edit.
+              </Text>
+            </View>
           ) : undefined
         }
         ListEmptyComponent={
           drafts.loading ? undefined : (
             <Empty
+              icon={Inbox}
               title="All caught up"
-              message="New payments from your bank and UPI apps will appear here for a quick check."
+              message="New payments from your bank and UPI apps will land here for a quick check."
             />
           )
         }
         renderItem={({ item }) => {
-          const category = categoryOf(item.categoryId);
           const needsDetails = item.amountPaise <= 0;
           const name = item.merchantName ?? 'Unknown payee';
           return (
             <SwipeRow
               label={`${name}, ${
                 needsDetails ? 'amount missing' : formatPaise(item.amountPaise)
-              }, ${category?.name ?? ''}`}
+              }`}
               confirmLabel={needsDetails ? 'Add details' : 'Confirm'}
+              confirmIsEdit={needsDetails}
               onConfirm={() => confirm(item)}
               onIgnore={() => ignore(item)}
               onOpen={() =>
@@ -104,33 +134,56 @@ export function InboxScreen() {
               }
             >
               <View style={styles.row}>
-                <Text style={styles.icon}>{category?.icon ?? '❓'}</Text>
+                <CategoryBadge id={item.categoryId} size={46} />
                 <View style={styles.flex}>
                   <Text
-                    style={[styles.name, { color: t.text }]}
+                    style={[type.label, { color: t.text }]}
                     numberOfLines={1}
                   >
                     {name}
                   </Text>
-                  <Text style={[styles.meta, { color: t.textMuted }]}>
-                    {category?.name ?? 'Uncategorized'} ·{' '}
+                  <Text
+                    style={[type.caption, { color: t.textMuted }]}
+                    numberOfLines={1}
+                  >
                     {formatDateTime(item.occurredAt)}
-                    {item.accountHint ? ` · ••${item.accountHint}` : ''}
+                    {item.accountHint ? `  ·  ••${item.accountHint}` : ''}
                   </Text>
-                  <View style={styles.pills}>
-                    {needsDetails && (
-                      <Pill label="Needs details" tone="warning" />
-                    )}
-                    {item.possibleDuplicateOf !== null && (
-                      <Pill label="Possible duplicate" tone="warning" />
-                    )}
-                    {item.parsedBy === 'ai' && <Pill label="Read by AI" />}
-                  </View>
+                  {(needsDetails ||
+                    item.possibleDuplicateOf !== null ||
+                    item.parsedBy === 'ai') && (
+                    <View style={styles.chips}>
+                      {needsDetails && (
+                        <Chip
+                          label="Needs details"
+                          icon={TriangleAlert}
+                          tone="warning"
+                        />
+                      )}
+                      {item.possibleDuplicateOf !== null && (
+                        <Chip
+                          label="Possible duplicate"
+                          icon={CopyCheck}
+                          tone="warning"
+                        />
+                      )}
+                      {item.parsedBy === 'ai' && (
+                        <Chip
+                          label="Read by AI"
+                          icon={Sparkles}
+                          tone="primary"
+                        />
+                      )}
+                    </View>
+                  )}
                 </View>
                 {needsDetails ? (
-                  <Text style={[styles.name, { color: t.warning }]}>₹ ?</Text>
+                  <Text style={[type.h3, { color: t.warning }]}>₹ —</Text>
                 ) : (
-                  <Amount paise={item.amountPaise} direction={item.direction} />
+                  <AmountText
+                    paise={item.amountPaise}
+                    direction={item.direction}
+                  />
                 )}
               </View>
             </SwipeRow>
@@ -139,10 +192,16 @@ export function InboxScreen() {
       />
       {undo && (
         <View
-          style={[styles.snack, { backgroundColor: t.text }]}
+          style={[
+            styles.snack,
+            {
+              bottom: insets.bottom + TAB_BAR_SPACE - spacing.sm,
+              backgroundColor: t.inverse,
+            },
+          ]}
           accessibilityLiveRegion="polite"
         >
-          <Text style={[styles.snackText, { color: t.bg }]}>
+          <Text style={[type.label, styles.flex, { color: t.onInverse }]}>
             {undo.message}
           </Text>
           <Pressable
@@ -154,44 +213,47 @@ export function InboxScreen() {
             }}
             style={styles.snackButton}
           >
-            <Text style={[styles.snackAction, { color: t.primary }]}>UNDO</Text>
+            <Undo2 size={18} color={t.primary2} strokeWidth={2.5} />
+            <Text style={[type.label, { color: t.primary2 }]}>Undo</Text>
           </Pressable>
         </View>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  list: { padding: spacing.lg, paddingBottom: 96 },
-  hint: { fontSize: 13, marginBottom: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  icon: { fontSize: 24, width: 40 },
-  flex: { flex: 1, marginRight: spacing.sm },
-  name: { fontSize: 16, fontWeight: '600' },
-  meta: { fontSize: 13, marginTop: 2 },
-  pills: {
+  flex: { flex: 1, gap: 2 },
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  chips: {
     flexDirection: 'row',
     gap: spacing.xs,
-    marginTop: spacing.xs,
+    marginTop: 6,
     flexWrap: 'wrap',
   },
   snack: {
     position: 'absolute',
     left: spacing.lg,
     right: spacing.lg,
-    bottom: spacing.lg,
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingLeft: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
   },
-  snackText: { flex: 1, fontSize: 15 },
   snackButton: {
-    minHeight: 48,
-    justifyContent: 'center',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: spacing.lg,
   },
-  snackAction: { fontWeight: '700' },
 });

@@ -1,7 +1,19 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  BatteryCharging,
+  BellRing,
+  CloudOff,
+  EyeOff,
+  FingerprintPattern,
+  LayoutGrid,
+  MessageSquareText,
+  ShieldCheck,
+  Sparkles,
+  Zap,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { Alert, StyleSheet, Text } from 'react-native';
 import { isAiEnabled } from '../ai/aiFallback';
 import { useCaptureStatus } from '../capture/CaptureProvider';
 import {
@@ -13,44 +25,22 @@ import { deleteSetting, setSetting, SettingKeys } from '../db/settings';
 import { authenticate, canUseAppLock } from '../device/deviceServices';
 import type { RootStackParamList } from '../navigation/types';
 import { useAppStore } from '../state/store';
-import { Body, Button, Card, Screen, SectionTitle } from '../ui/components';
-import { spacing, useTheme } from '../ui/theme';
+import {
+  Chip,
+  Divider,
+  GlassCard,
+  ListRow,
+  Screen,
+  SectionTitle,
+  ToggleRow,
+} from '../ui/components';
+import { spacing, type, useTheme } from '../ui/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-function ToggleRow({
-  label,
-  description,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  description?: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  disabled?: boolean;
-}) {
-  const t = useTheme();
-  return (
-    <View style={styles.row}>
-      <View style={styles.flex}>
-        <Body>{label}</Body>
-        {description ? <Body muted>{description}</Body> : null}
-      </View>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        onValueChange={onChange}
-        disabled={disabled}
-        trackColor={{ true: t.primary, false: t.border }}
-      />
-    </View>
-  );
-}
-
 export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
+  const t = useTheme();
   const status = useCaptureStatus();
   const appLockEnabled = useAppStore(s => s.appLockEnabled);
   const setAppLockEnabled = useAppStore(s => s.setAppLockEnabled);
@@ -116,85 +106,132 @@ export function SettingsScreen() {
     setAppLockEnabled(value);
   };
 
+  const access = status.permissionGranted;
+
   return (
-    <Screen>
+    <Screen tabs title="Settings" subtitle="Capture, security and privacy">
       <SectionTitle>Capture</SectionTitle>
-      <Card>
+      <GlassCard>
         <ToggleRow
-          label="Capture payments automatically"
-          description="Turning this off stops reading notifications immediately. Expenses already saved stay."
+          icon={Zap}
+          iconColor={t.primary}
+          title="Automatic capture"
+          subtitle="Read payment notifications. Turning off stops it immediately; saved expenses stay."
           value={captureOn}
           onChange={toggleCapture}
         />
+        <Divider />
         <ToggleRow
-          label="Read bank SMS alerts"
-          description="Off by default. Reads notifications from your SMS app and keeps payment messages only."
+          icon={MessageSquareText}
+          iconColor="#0EA5E9"
+          title="Bank SMS alerts"
+          subtitle="Off by default. Keeps payment messages only."
           value={smsOn}
           onChange={toggleSms}
           disabled={!captureOn}
         />
-        <Body muted>
-          Notification access:{' '}
-          {status.permissionGranted
-            ? 'on'
-            : status.permissionGranted === false
-            ? 'off'
-            : '…'}
-        </Body>
-        <Button
-          label="Notification access settings"
-          variant="secondary"
+        <Divider />
+        <ListRow
+          icon={BellRing}
+          iconColor="#F59E0B"
+          title="Notification access"
+          subtitle="Required by Android to read payment alerts"
+          right={
+            access === null ? undefined : (
+              <Chip
+                label={access ? 'On' : 'Off'}
+                tone={access ? 'success' : 'warning'}
+              />
+            )
+          }
           onPress={status.openSettings}
+          chevron
         />
-        <Button
-          label="Apps to read from"
-          variant="secondary"
+        <Divider />
+        <ListRow
+          icon={LayoutGrid}
+          iconColor="#8B5CF6"
+          title="Apps to read from"
+          subtitle="Bank, UPI and SMS app list"
           onPress={() => navigation.navigate('CaptureSources')}
+          chevron
         />
-        <Button
-          label="Battery settings guide"
-          variant="secondary"
+        <Divider />
+        <ListRow
+          icon={BatteryCharging}
+          iconColor="#22C55E"
+          title="Battery settings"
+          subtitle="Stop your phone from pausing capture"
           onPress={() => navigation.navigate('BatteryGuide')}
+          chevron
         />
-      </Card>
+      </GlassCard>
 
       <SectionTitle>Security</SectionTitle>
-      <Card>
+      <GlassCard>
         <ToggleRow
-          label="App lock"
-          description={
+          icon={FingerprintPattern}
+          iconColor="#EC4899"
+          title="App lock"
+          subtitle={
             lockAvailable
-              ? 'Fingerprint, face or phone PIN to open the app.'
-              : 'Set a screen lock on your phone to use this.'
+              ? 'Fingerprint, face or phone PIN to open'
+              : 'Set a screen lock on your phone to use this'
           }
           value={appLockEnabled}
           onChange={toggleLock}
           disabled={!lockAvailable && !appLockEnabled}
         />
-      </Card>
+      </GlassCard>
 
       <SectionTitle>Privacy</SectionTitle>
-      <Card>
-        <Body>• OTPs and verification codes are never stored.</Body>
-        <Body>
-          • Account and card numbers are cut to their last 4 digits before
-          saving.
-        </Body>
-        <Body>
-          • Your data stays on this phone and is excluded from phone backups.
-        </Body>
-        <Body>
-          • AI reading of unclear messages:{' '}
-          {isAiEnabled()
-            ? 'on (masked text is sent to our server only when the phone cannot read it)'
-            : 'off in this build'}
-        </Body>
-      </Card>
+      <GlassCard>
+        <ListRow
+          icon={EyeOff}
+          iconColor="#14B8A6"
+          title="OTPs are never stored"
+          subtitle="Codes and other apps' notifications are discarded on the phone."
+        />
+        <Divider />
+        <ListRow
+          icon={ShieldCheck}
+          iconColor="#14B8A6"
+          title="Numbers are masked"
+          subtitle="Account and card numbers keep only their last 4 digits."
+        />
+        <Divider />
+        <ListRow
+          icon={CloudOff}
+          iconColor="#14B8A6"
+          title="Not in phone backups"
+          subtitle="Your data stays on this phone."
+        />
+        <Divider />
+        <ListRow
+          icon={Sparkles}
+          iconColor={t.primary}
+          title="AI reading of unclear messages"
+          subtitle={
+            isAiEnabled()
+              ? 'Masked text goes to our server only when the phone cannot read it.'
+              : 'Not enabled in this build.'
+          }
+          right={
+            <Chip
+              label={isAiEnabled() ? 'On' : 'Off'}
+              tone={isAiEnabled() ? 'primary' : 'neutral'}
+            />
+          }
+        />
+      </GlassCard>
+
+      <Text style={[type.caption, styles.footer, { color: t.textSubtle }]}>
+        ExpenseTracker · version 0.0.1
+      </Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
-  flex: { flex: 1, marginRight: spacing.md },
+  footer: { textAlign: 'center', marginTop: spacing.lg },
 });
