@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import React, { useId } from 'react';
+import React, { useCallback, useId, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,9 +11,15 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import type { StyleProp, TextInputProps, ViewStyle } from 'react-native';
+import type {
+  LayoutChangeEvent,
+  StyleProp,
+  TextInputProps,
+  ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, {
   Circle,
@@ -36,34 +42,59 @@ const useSvgId = (prefix: string) =>
 
 // ---------------------------------------------------------------------------------------------
 // Backdrop + gradients
+//
+// react-native-svg does not size reliably from percentages on Android (gradients rendered at a
+// stale size), so every SVG here is drawn at measured pixel sizes.
 
-/** Soft multi-colour glow behind every screen; what makes the glass surfaces read as glass. */
+type Size = { w: number; h: number };
+
+/** Measures the parent box; children render only once the size is known. */
+function useBoxSize(): [Size | null, (e: LayoutChangeEvent) => void] {
+  const [size, setSize] = useState<Size | null>(null);
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize(prev =>
+      prev && prev.w === width && prev.h === height
+        ? prev
+        : { w: width, h: height },
+    );
+  }, []);
+  return [size, onLayout];
+}
+
+/**
+ * Vivid colour field behind every screen. Glass only reads as glass when there is colour
+ * behind it, so these glows are deliberately strong.
+ */
 export function AppBackground() {
   const t = useTheme();
   const id = useSvgId('bg');
+  const { width: w, height: h } = useWindowDimensions();
   const spots = [
-    { cx: '8%', cy: '4%', r: 300 },
-    { cx: '100%', cy: '38%', r: 260 },
-    { cx: '10%', cy: '92%', r: 300 },
+    { cx: -0.1 * w, cy: 0.02 * h, r: 0.85 * w },
+    { cx: 1.1 * w, cy: 0.3 * h, r: 0.8 * w },
+    { cx: 0.05 * w, cy: 0.72 * h, r: 0.85 * w },
+    { cx: 1.0 * w, cy: 1.0 * h, r: 0.7 * w },
   ];
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width="100%" height="100%">
+    <View
+      style={[StyleSheet.absoluteFill, { backgroundColor: t.bg }]}
+      pointerEvents="none"
+    >
+      <Svg width={w} height={h}>
         <Defs>
           {t.blobs.map(([color, opacity], i) => (
-            <RadialGradient
-              key={color}
-              id={`${id}${i}`}
-              cx="50%"
-              cy="50%"
-              r="50%"
-            >
+            <RadialGradient key={i} id={`${id}${i}`} cx="50%" cy="50%" r="50%">
               <Stop offset="0" stopColor={color} stopOpacity={opacity} />
+              <Stop
+                offset="0.55"
+                stopColor={color}
+                stopOpacity={opacity * 0.45}
+              />
               <Stop offset="1" stopColor={color} stopOpacity={0} />
             </RadialGradient>
           ))}
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={t.bg} />
         {spots.map((spot, i) => (
           <Circle
             key={i}
@@ -78,7 +109,7 @@ export function AppBackground() {
   );
 }
 
-/** Brand gradient filling its parent (parent sets size, radius and overflow: hidden). */
+/** Brand gradient filling its parent (parent sets size and radius). */
 export function GradientFill({
   from,
   to,
@@ -90,24 +121,86 @@ export function GradientFill({
 }) {
   const t = useTheme();
   const id = useSvgId('lg');
+  const [size, onLayout] = useBoxSize();
+  const first = from ?? t.primary;
   return (
-    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-      <Defs>
-        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={from ?? t.primary} />
-          <Stop offset="1" stopColor={to ?? t.primary2} />
-        </LinearGradient>
-      </Defs>
-      <Rect
-        x="0"
-        y="0"
-        width="100%"
-        height="100%"
-        rx={rounded}
-        ry={rounded}
-        fill={`url(#${id})`}
-      />
-    </Svg>
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        { borderRadius: rounded, backgroundColor: first },
+      ]}
+      onLayout={onLayout}
+      pointerEvents="none"
+    >
+      {size ? (
+        <Svg width={size.w} height={size.h}>
+          <Defs>
+            <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={first} />
+              <Stop offset="1" stopColor={to ?? t.primary2} />
+            </LinearGradient>
+          </Defs>
+          <Rect
+            x={0}
+            y={0}
+            width={size.w}
+            height={size.h}
+            rx={rounded}
+            ry={rounded}
+            fill={`url(#${id})`}
+          />
+        </Svg>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Specular highlight for glass: a white wash from the top-left fading out. Together with the
+ * bright top rim and the colour behind, this is what turns a translucent box into "glass".
+ */
+export function GlassSheen({
+  rounded,
+  strength = 1,
+}: {
+  rounded: number;
+  strength?: number;
+}) {
+  const t = useTheme();
+  const id = useSvgId('sh');
+  const [size, onLayout] = useBoxSize();
+  const top = (t.dark ? 0.14 : 0.7) * strength;
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      onLayout={onLayout}
+      pointerEvents="none"
+    >
+      {size ? (
+        <Svg width={size.w} height={size.h}>
+          <Defs>
+            <LinearGradient id={id} x1="0" y1="0" x2="0.6" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={top} />
+              <Stop
+                offset="0.45"
+                stopColor="#FFFFFF"
+                stopOpacity={top * 0.25}
+              />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Rect
+            x={0}
+            y={0}
+            width={size.w}
+            height={size.h}
+            rx={rounded}
+            ry={rounded}
+            fill={`url(#${id})`}
+          />
+        </Svg>
+      ) : null}
+    </View>
   );
 }
 
@@ -233,12 +326,13 @@ export function GlassCard({
         {
           backgroundColor: strong ? t.glassStrong : t.glass,
           borderColor: t.glassBorder,
-          padding: padded ? spacing.lg : 0,
+          borderTopColor: t.glassRim,
         },
         style,
       ]}
     >
-      {children}
+      <GlassSheen rounded={radius.lg} strength={strong ? 0.8 : 1} />
+      <View style={padded ? styles.glassPad : undefined}>{children}</View>
     </View>
   );
 }
@@ -252,13 +346,18 @@ export function HeroCard({ children }: { children: React.ReactNode }) {
     <View
       style={[
         styles.hero,
-        { boxShadow: `0 12px 28px ${alpha(t.primary, 0.35)}` },
+        {
+          // Opaque base so the shadow renders as a shadow (not a pale box) on Android.
+          backgroundColor: t.heroFrom,
+          boxShadow: `0 14px 30px ${alpha(t.heroFrom, 0.38)}`,
+        },
       ]}
     >
-      <GradientFill rounded={radius.xl} />
-      {/* Light sheen across the top for depth */}
-      <View style={styles.heroSheen} />
-      {children}
+      <GradientFill rounded={radius.xl} from={t.heroFrom} to={t.heroTo} />
+      <View style={styles.heroOrbA} pointerEvents="none" />
+      <View style={styles.heroOrbB} pointerEvents="none" />
+      <GlassSheen rounded={radius.xl} strength={0.35} />
+      <View style={styles.heroContent}>{children}</View>
     </View>
   );
 }
@@ -976,21 +1075,32 @@ export const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     marginBottom: spacing.md,
+    overflow: 'hidden',
   },
+  glassPad: { padding: spacing.lg },
   hero: {
     borderRadius: radius.xl,
-    padding: spacing.xl,
     marginBottom: spacing.lg,
     overflow: 'hidden',
   },
-  heroSheen: {
+  heroContent: { padding: spacing.xl },
+  heroOrbA: {
     position: 'absolute',
-    top: -80,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    top: -70,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  heroOrbB: {
+    position: 'absolute',
+    bottom: -90,
+    left: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   sectionRow: {
     flexDirection: 'row',

@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GradientFill } from './components';
+import { GlassSheen, GradientFill } from './components';
 import { alpha, radius, spacing, useTheme } from './theme';
 
 const ICONS: Record<string, LucideIcon> = {
@@ -100,10 +100,12 @@ export function GlassTabBar({
           {
             backgroundColor: t.elevated,
             borderColor: t.glassBorder,
+            borderTopColor: t.glassRim,
             boxShadow: `0 10px 30px ${alpha(t.shadow, t.dark ? 0.5 : 0.14)}`,
           },
         ]}
       >
+        <GlassSheen rounded={radius.xl} strength={0.7} />
         {state.routes.slice(0, half).map((_, i) => renderTab(i))}
         <View style={styles.fabSlot}>
           <Pressable
@@ -152,9 +154,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconPill: {
-    width: 52,
+    width: 56,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

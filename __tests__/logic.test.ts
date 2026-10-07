@@ -169,6 +169,14 @@ describe('voice parser', () => {
     });
   });
 
+  test('mis-heard prepositions still give a payee', () => {
+    expect(parseVoiceText('250 online chat Cafe')).toEqual({
+      amountPaise: 25000,
+      direction: 'debit',
+      merchant: 'Online Chat Cafe',
+    });
+  });
+
   test('no amount', () => {
     expect(parseVoiceText('bought vegetables').amountPaise).toBeNull();
   });

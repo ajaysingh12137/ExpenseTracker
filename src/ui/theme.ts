@@ -13,7 +13,11 @@ export type Theme = {
   glass: string;
   glassStrong: string;
   glassBorder: string;
+  /** Brighter top edge of glass surfaces (light catching the rim). */
+  glassRim: string;
   hairline: string;
+  heroFrom: string;
+  heroTo: string;
   /** Near-opaque surface for things that float over content (tab bar, swipe rows). */
   elevated: string;
   /** Opaque surface for bottom sheets. */
@@ -36,17 +40,19 @@ export type Theme = {
 
 const light: Theme = {
   dark: false,
-  bg: '#F3F4FB',
+  bg: '#ECEEFF',
   blobs: [
-    ['#6D5DFC', 0.22],
-    ['#22C3A6', 0.16],
-    ['#FF7AB6', 0.14],
+    ['#7C5CFF', 0.62],
+    ['#22D3EE', 0.5],
+    ['#FF6FB5', 0.45],
+    ['#FFB067', 0.4],
   ],
-  glass: 'rgba(255,255,255,0.66)',
-  glassStrong: 'rgba(255,255,255,0.88)',
-  glassBorder: 'rgba(255,255,255,0.95)',
+  glass: 'rgba(255,255,255,0.38)',
+  glassStrong: 'rgba(255,255,255,0.62)',
+  glassBorder: 'rgba(255,255,255,0.55)',
+  glassRim: 'rgba(255,255,255,0.95)',
   hairline: 'rgba(17,20,45,0.08)',
-  elevated: 'rgba(255,255,255,0.92)',
+  elevated: 'rgba(255,255,255,0.78)',
   sheet: '#FFFFFF',
   inverse: '#141726',
   onInverse: '#FFFFFF',
@@ -55,6 +61,8 @@ const light: Theme = {
   textSubtle: '#7E8499',
   primary: '#5B4CF5',
   primary2: '#8E5CF6',
+  heroFrom: '#4F46E5',
+  heroTo: '#A855F7',
   onPrimary: '#FFFFFF',
   debit: '#D92D45',
   credit: '#13894A',
@@ -65,17 +73,19 @@ const light: Theme = {
 
 const dark: Theme = {
   dark: true,
-  bg: '#080A13',
+  bg: '#070814',
   blobs: [
-    ['#6D5DFC', 0.34],
-    ['#14B8A6', 0.2],
-    ['#EC4899', 0.16],
+    ['#6D5DFC', 0.55],
+    ['#06B6D4', 0.34],
+    ['#EC4899', 0.32],
+    ['#F59E0B', 0.18],
   ],
-  glass: 'rgba(255,255,255,0.055)',
-  glassStrong: 'rgba(255,255,255,0.10)',
-  glassBorder: 'rgba(255,255,255,0.12)',
+  glass: 'rgba(255,255,255,0.07)',
+  glassStrong: 'rgba(255,255,255,0.12)',
+  glassBorder: 'rgba(255,255,255,0.10)',
+  glassRim: 'rgba(255,255,255,0.28)',
   hairline: 'rgba(255,255,255,0.08)',
-  elevated: 'rgba(22,24,42,0.94)',
+  elevated: 'rgba(22,24,42,0.86)',
   sheet: '#141726',
   inverse: '#EEF0FA',
   onInverse: '#141726',
@@ -84,6 +94,8 @@ const dark: Theme = {
   textSubtle: '#7D839C',
   primary: '#7C6CFF',
   primary2: '#A78BFA',
+  heroFrom: '#5B4CF5',
+  heroTo: '#C026D3',
   onPrimary: '#FFFFFF',
   debit: '#FF7A85',
   credit: '#4ADE80',

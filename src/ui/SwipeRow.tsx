@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { AccessibilityActionEvent } from 'react-native';
+import { GlassSheen } from './components';
 import { alpha, radius, spacing, useTheme } from './theme';
 
 const THRESHOLD = 96;
@@ -156,10 +157,12 @@ export function SwipeRow({
             {
               backgroundColor: t.elevated,
               borderColor: t.glassBorder,
+              borderTopColor: t.glassRim,
               opacity: pressed ? 0.85 : 1,
             },
           ]}
         >
+          <GlassSheen rounded={radius.lg} strength={0.8} />
           {children}
         </Pressable>
       </Animated.View>
@@ -192,6 +195,7 @@ const styles = StyleSheet.create({
   },
   underText: { fontSize: 15, fontWeight: '800' },
   front: {
+    overflow: 'hidden',
     borderRadius: radius.lg,
     borderWidth: 1,
     padding: spacing.md,
