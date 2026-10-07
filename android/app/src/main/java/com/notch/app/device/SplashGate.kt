@@ -1,4 +1,4 @@
-package com.expensetracker.device
+package com.notch.app.device
 
 /**
  * Keeps the native splash on screen until JS has loaded settings and drawn its first frame,

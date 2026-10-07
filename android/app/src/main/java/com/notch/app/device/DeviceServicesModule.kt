@@ -1,4 +1,4 @@
-package com.expensetracker.device
+package com.notch.app.device
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -14,7 +14,7 @@ import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.expensetracker.capture.NativeDeviceServicesSpec
+import com.notch.app.capture.NativeDeviceServicesSpec
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -140,6 +140,17 @@ class DeviceServicesModule(reactContext: ReactApplicationContext) :
 
   override fun openAppDetailsSettings(promise: Promise) {
     promise.resolve(startFirst(appDetailsIntent()))
+  }
+
+  override fun setThemeMode(mode: String, promise: Promise) {
+    UiThreadUtil.runOnUiThread {
+      ThemePrefs.set(reactApplicationContext, mode)
+      promise.resolve(null)
+    }
+  }
+
+  override fun getThemeMode(promise: Promise) {
+    promise.resolve(ThemePrefs.get(reactApplicationContext))
   }
 
   override fun hideSplash() {

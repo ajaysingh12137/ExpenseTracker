@@ -255,7 +255,7 @@ function Access({ onNext }: { onNext: () => void }) {
       <StepHero
         icon={BellRing}
         title="Allow notification access"
-        text='Android shows a list of apps that can read notifications. Turn on "ExpenseTracker", then come back here.'
+        text='Android shows a list of apps that can read notifications. Turn on "Notch", then come back here.'
       />
       {granted ? (
         <>

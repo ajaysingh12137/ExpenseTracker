@@ -1,4 +1,4 @@
-package com.expensetracker.capture
+package com.notch.app.capture
 
 import android.app.Notification
 import android.os.Build

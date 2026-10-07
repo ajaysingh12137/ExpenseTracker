@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Appearance, Platform } from 'react-native';
 import type { Spec } from '../../specs/NativeDeviceServices';
 
 let nativeModule: Spec | null | undefined;
@@ -51,6 +51,19 @@ export async function openBatteryOptimizationSettings(): Promise<boolean> {
 
 export async function openAppDetailsSettings(): Promise<boolean> {
   return (await native()?.openAppDetailsSettings()) ?? false;
+}
+
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+export async function getThemeMode(): Promise<ThemeMode> {
+  const mode = await native()?.getThemeMode();
+  return mode === 'light' || mode === 'dark' ? mode : 'system';
+}
+
+/** Persists natively (applies from the next launch splash onwards) and switches now. */
+export async function setThemeMode(mode: ThemeMode): Promise<void> {
+  Appearance.setColorScheme(mode === 'system' ? 'auto' : mode);
+  await native()?.setThemeMode(mode);
 }
 
 export function hideSplash(): void {

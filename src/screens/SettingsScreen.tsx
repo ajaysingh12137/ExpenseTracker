@@ -8,8 +8,12 @@ import {
   FingerprintPattern,
   LayoutGrid,
   MessageSquareText,
+  Moon,
+  Palette,
   ShieldCheck,
   Sparkles,
+  Sun,
+  SunMoon,
   Zap,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -22,7 +26,13 @@ import {
   setSmsAppsEnabled,
 } from '../capture/transactionCapture';
 import { deleteSetting, setSetting, SettingKeys } from '../db/settings';
-import { authenticate, canUseAppLock } from '../device/deviceServices';
+import {
+  authenticate,
+  canUseAppLock,
+  getThemeMode,
+  setThemeMode,
+} from '../device/deviceServices';
+import type { ThemeMode } from '../device/deviceServices';
 import type { RootStackParamList } from '../navigation/types';
 import { useAppStore } from '../state/store';
 import { BrandLockup } from '../ui/BrandMark';
@@ -33,6 +43,7 @@ import {
   ListRow,
   Screen,
   SectionTitle,
+  Segmented,
   ToggleRow,
 } from '../ui/components';
 import { spacing, type, useTheme } from '../ui/theme';
@@ -48,13 +59,20 @@ export function SettingsScreen() {
   const [captureOn, setCaptureOn] = useState(false);
   const [smsOn, setSmsOn] = useState(false);
   const [lockAvailable, setLockAvailable] = useState(false);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
 
   const load = useCallback(async () => {
     const config = await getCaptureConfig();
     setCaptureOn(config?.captureEnabled ?? false);
     setSmsOn(config?.smsAppsEnabled ?? false);
     setLockAvailable(await canUseAppLock());
+    setThemeModeState(await getThemeMode());
   }, []);
+
+  const changeTheme = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    setThemeMode(mode).catch(() => {});
+  };
 
   useEffect(() => {
     load();
@@ -165,6 +183,31 @@ export function SettingsScreen() {
           subtitle="Stop your phone from pausing capture"
           onPress={() => navigation.navigate('BatteryGuide')}
           chevron
+        />
+      </GlassCard>
+
+      <SectionTitle>Appearance</SectionTitle>
+      <GlassCard>
+        <ListRow
+          icon={Palette}
+          iconColor="#8B5CF6"
+          title="Theme"
+          subtitle={
+            themeMode === 'system'
+              ? 'Follows your phone setting'
+              : themeMode === 'dark'
+              ? 'Always dark'
+              : 'Always light'
+          }
+        />
+        <Segmented
+          options={[
+            { value: 'system', label: 'Auto', icon: SunMoon },
+            { value: 'light', label: 'Light', icon: Sun },
+            { value: 'dark', label: 'Dark', icon: Moon },
+          ]}
+          value={themeMode}
+          onChange={changeTheme}
         />
       </GlassCard>
 

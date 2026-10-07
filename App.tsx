@@ -7,12 +7,18 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StatusBar, StyleSheet, View } from 'react-native';
+import {
+  Appearance,
+  AppState,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CaptureProvider } from './src/capture/CaptureProvider';
 import { countDrafts } from './src/db/repository';
 import { getSetting, SettingKeys } from './src/db/settings';
-import { hideSplash } from './src/device/deviceServices';
+import { getThemeMode, hideSplash } from './src/device/deviceServices';
 import type { RootStackParamList, TabParamList } from './src/navigation/types';
 import { AddTransactionScreen } from './src/screens/AddTransactionScreen';
 import { BatteryGuideScreen } from './src/screens/BatteryGuideScreen';
@@ -110,6 +116,11 @@ function Root() {
   useEffect(() => {
     (async () => {
       const store = useAppStore.getState();
+      // Native already applied the saved theme; mirror it in JS before the splash lifts.
+      const mode = await getThemeMode();
+      if (mode !== 'system') {
+        Appearance.setColorScheme(mode);
+      }
       const lock = (await getSetting(SettingKeys.appLock)) === '1';
       store.setAppLockEnabled(lock);
       store.setUnlocked(!lock);

@@ -19,6 +19,9 @@ export interface Spec extends TurboModule {
   getManufacturer(): Promise<string>;
   /** Releases the native launch splash once the first JS screen is ready. */
   hideSplash(): void;
+  /** "system" | "light" | "dark". Persisted natively and applied immediately. */
+  setThemeMode(mode: string): Promise<void>;
+  getThemeMode(): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('DeviceServices');

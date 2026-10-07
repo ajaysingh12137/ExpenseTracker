@@ -1,5 +1,5 @@
 {
-  "name": "ExpenseTracker",
+  "name": "notch",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -48,11 +48,11 @@
     "node": ">= 22.11.0"
   },
   "codegenConfig": {
-    "name": "ExpenseTrackerSpecs",
+    "name": "NotchSpecs",
     "type": "modules",
     "jsSrcsDir": "specs",
     "android": {
-      "javaPackageName": "com.expensetracker.capture"
+      "javaPackageName": "com.notch.app.capture"
     }
   }
 }

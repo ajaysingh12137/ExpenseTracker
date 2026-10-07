@@ -1,4 +1,4 @@
-# ExpenseTracker — project context
+# Notch (formerly ExpenseTracker) — project context
 
 Product requirements (source of truth): @docs/PRD.md · Phased plan: @docs/ROADMAP.md
 When this file, the roadmap and the PRD disagree, **the PRD wins**.
@@ -72,12 +72,15 @@ docs/PRD.md docs/ROADMAP.md
   ListRow, IconBadge, CategoryPicker…), `GlassTabBar.tsx`. Icons: `lucide-react-native` only
   (needs `react-native-svg`); category icon/colour from `categoryVisuals.ts`, not the DB emoji.
   Screens hide native headers and render `Screen title/onBack` themselves.
-- Brand: mark = ₹ + gold spark on indigo→violet squircle. Source of truth
-  `scripts/brand/design.js`; regenerate launcher icons (adaptive + monochrome + legacy PNGs),
-  splash icon and `docs/brand/*` with `npm i --no-save sharp && node scripts/brand/generate.js`.
-  `src/ui/BrandMark.tsx` mirrors the same geometry for in-app use. Launch flow: native
-  splash (core-splashscreen, `Theme.App.Starting`) held via `SplashGate` until JS calls
-  `hideSplash()` (3 s cap) → `BrandIntro` (identical first frame) animates out over the app.
+- Brand: **Notch** (store title "Notch: Auto Expense Tracker", tagline "Every rupee, noted."),
+  package id `com.notch.app` (permanent once uploaded to Play). Mark = four white tally strokes
+  crossed by a gold fifth on a midnight→indigo squircle. Source of truth `scripts/brand/design.js`;
+  regenerate launcher icons (adaptive + monochrome + legacy PNGs), splash icon and `docs/brand/*`
+  with `npm i --no-save sharp && node scripts/brand/generate.js`. `src/ui/BrandMark.tsx` mirrors the
+  geometry. Launch: native splash (core-splashscreen, `Theme.App.Starting`) held via `SplashGate`
+  until JS calls `hideSplash()` (3 s cap) → `BrandIntro` animates out over the app.
+- Theme: System/Light/Dark in Settings. Persisted natively (`ThemePrefs`, applied in
+  `MainApplication.onCreate` so the splash matches) and mirrored in JS via `Appearance.setColorScheme`.
 - Changing a spec requires a native rebuild (codegen). Don't rename module/spec names casually.
 
 ## Commands (Windows dev machine)

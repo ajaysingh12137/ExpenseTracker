@@ -1,8 +1,9 @@
-package com.expensetracker
+package com.notch.app
 
 import android.app.Application
-import com.expensetracker.capture.TransactionCapturePackage
-import com.expensetracker.device.DeviceServicesPackage
+import com.notch.app.capture.TransactionCapturePackage
+import com.notch.app.device.DeviceServicesPackage
+import com.notch.app.device.ThemePrefs
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -24,6 +25,8 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Apply the saved light/dark choice before any UI (splash included) is created.
+    ThemePrefs.apply(ThemePrefs.get(this))
     loadReactNative(this)
   }
 }

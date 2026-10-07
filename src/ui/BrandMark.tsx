@@ -13,20 +13,14 @@ import Svg, {
 import { type as typography, useTheme } from './theme';
 
 /**
- * The brand mark: ₹ with a gold "auto" spark on the indigo→violet squircle. Same geometry as
- * the launcher icon (docs/brand/brand-mark.svg, 108-unit adaptive-icon grid).
+ * The Notch mark: four tally strokes crossed by a gold fifth ("every rupee, noted") on a
+ * midnight-to-indigo squircle. Same geometry as the launcher icon (scripts/brand/design.js).
  */
-const RUPEE = [
-  'M36 35 H66',
-  'M36 46 H66',
-  'M44 35 C56 35 61 40 61 45.5 C61 51.5 56 57 46 57 H40',
-  'M40 57 L62 77',
-];
-const SPARK =
-  'M76 25 C76.8 29.6 78.4 31.2 83 32 C78.4 32.8 76.8 34.4 76 39 C75.2 34.4 73.6 32.8 69 32 C73.6 31.2 75.2 29.6 76 25 Z';
+const STROKES = ['M36 32 V76', 'M48 32 V76', 'M60 32 V76', 'M72 32 V76'];
+const SLASH = 'M28 70 L80 38';
 
-export const BRAND_NAME = 'ExpenseTracker';
-export const BRAND_TAGLINE = 'Expenses, logged for you';
+export const BRAND_NAME = 'Notch';
+export const BRAND_TAGLINE = 'Every rupee, noted.';
 
 export function BrandMark({ size = 96 }: { size?: number }) {
   return (
@@ -41,30 +35,29 @@ export function BrandMark({ size = 96 }: { size?: number }) {
           <Rect width={108} height={108} rx={30} ry={30} />
         </ClipPath>
         <LinearGradient id="bmBg" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#4F46E5" />
-          <Stop offset="1" stopColor="#9333EA" />
+          <Stop offset="0" stopColor="#1E1B4B" />
+          <Stop offset="1" stopColor="#4F46E5" />
         </LinearGradient>
         <RadialGradient id="bmHl" cx="0.25" cy="0.15" r="0.75">
-          <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.28} />
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.22} />
           <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
         </RadialGradient>
       </Defs>
       <G clipPath="url(#bmClip)">
         <Rect width={108} height={108} fill="url(#bmBg)" />
         <Rect width={108} height={108} fill="url(#bmHl)" />
-        <G
-          transform="translate(-2 -2)"
-          fill="none"
-          stroke="#FFFFFF"
-          strokeWidth={7.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {RUPEE.map(d => (
+        <G fill="none" stroke="#FFFFFF" strokeWidth={6.5} strokeLinecap="round">
+          {STROKES.map(d => (
             <Path key={d} d={d} />
           ))}
         </G>
-        <Path d={SPARK} fill="#FFD58A" />
+        <Path
+          d={SLASH}
+          fill="none"
+          stroke="#FFD58A"
+          strokeWidth={7.5}
+          strokeLinecap="round"
+        />
       </G>
     </Svg>
   );

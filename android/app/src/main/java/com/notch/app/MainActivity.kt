@@ -1,9 +1,9 @@
-package com.expensetracker
+package com.notch.app
 
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.expensetracker.device.SplashGate
+import com.notch.app.device.SplashGate
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -15,7 +15,7 @@ class MainActivity : ReactActivity() {
    * Returns the name of the main component registered from JavaScript. This is used to schedule
    * rendering of the component.
    */
-  override fun getMainComponentName(): String = "ExpenseTracker"
+  override fun getMainComponentName(): String = "Notch"
 
   override fun onCreate(savedInstanceState: Bundle?) {
     // Must run before super.onCreate. Holds the branded splash until JS reports ready.

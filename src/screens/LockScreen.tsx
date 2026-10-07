@@ -15,7 +15,7 @@ export function LockScreen() {
 
   const unlock = useCallback(async () => {
     const ok = await authenticate(
-      'Unlock ExpenseTracker',
+      'Unlock Notch',
       'Use your fingerprint, face or phone PIN',
     );
     if (ok) {
