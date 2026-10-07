@@ -53,6 +53,10 @@ export async function openAppDetailsSettings(): Promise<boolean> {
   return (await native()?.openAppDetailsSettings()) ?? false;
 }
 
+export function hideSplash(): void {
+  native()?.hideSplash();
+}
+
 export async function getManufacturer(): Promise<string> {
   return (await native()?.getManufacturer()) ?? '';
 }

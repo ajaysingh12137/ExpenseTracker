@@ -1,0 +1,4 @@
+<resources>
+    <!-- Matches theme.ts `bg` so the native splash hands off to the app without a flash. -->
+    <color name="splash_background">#F7F8FF</color>
+</resources>

@@ -142,6 +142,10 @@ class DeviceServicesModule(reactContext: ReactApplicationContext) :
     promise.resolve(startFirst(appDetailsIntent()))
   }
 
+  override fun hideSplash() {
+    SplashGate.ready = true
+  }
+
   override fun getManufacturer(promise: Promise) {
     promise.resolve(Build.MANUFACTURER.orEmpty().lowercase(Locale.ROOT))
   }

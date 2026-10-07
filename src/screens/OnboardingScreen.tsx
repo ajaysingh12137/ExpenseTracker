@@ -11,7 +11,6 @@ import {
   MessageSquareText,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   TriangleAlert,
   Zap,
 } from 'lucide-react-native';
@@ -38,6 +37,7 @@ import {
   Divider,
 } from '../ui/components';
 import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
+import { BrandMark } from '../ui/BrandMark';
 import { BatteryGuideContent } from './BatteryGuideScreen';
 
 const STEPS = [
@@ -93,10 +93,13 @@ export function OnboardingScreen() {
 
 function StepHero({
   icon: Icon,
+  brand,
   title,
   text,
 }: {
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  /** Show the app logo instead of an icon (welcome step). */
+  brand?: boolean;
   title: string;
   text: string;
 }) {
@@ -106,15 +109,21 @@ function StepHero({
       <View
         style={[styles.heroRing, { backgroundColor: alpha(t.primary, 0.12) }]}
       >
-        <View
-          style={[
-            styles.heroCircle,
-            { boxShadow: `0 12px 30px ${alpha(t.primary, 0.4)}` },
-          ]}
-        >
-          <GradientFill rounded={44} />
-          <Icon size={44} color="#FFFFFF" strokeWidth={2} />
-        </View>
+        {brand ? (
+          <View style={{ boxShadow: `0 14px 32px ${alpha(t.primary, 0.42)}` }}>
+            <BrandMark size={104} />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.heroCircle,
+              { boxShadow: `0 12px 30px ${alpha(t.primary, 0.4)}` },
+            ]}
+          >
+            <GradientFill rounded={44} />
+            {Icon ? <Icon size={44} color="#FFFFFF" strokeWidth={2} /> : null}
+          </View>
+        )}
       </View>
       <Text
         accessibilityRole="header"
@@ -134,7 +143,7 @@ function Welcome({ onNext }: { onNext: () => void }) {
   return (
     <>
       <StepHero
-        icon={Sparkles}
+        brand
         title="Expenses, logged for you"
         text="Pay by UPI or card as usual. We turn the payment alert into an expense, and you confirm it with a swipe."
       />

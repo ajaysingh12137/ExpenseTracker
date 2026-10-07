@@ -17,6 +17,8 @@ export interface Spec extends TurboModule {
   openAppDetailsSettings(): Promise<boolean>;
   /** Build.MANUFACTURER, lowercased (e.g. "xiaomi", "samsung"). */
   getManufacturer(): Promise<string>;
+  /** Releases the native launch splash once the first JS screen is ready. */
+  hideSplash(): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('DeviceServices');

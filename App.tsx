@@ -6,18 +6,13 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React, { useEffect, useRef } from 'react';
-import {
-  ActivityIndicator,
-  AppState,
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CaptureProvider } from './src/capture/CaptureProvider';
 import { countDrafts } from './src/db/repository';
 import { getSetting, SettingKeys } from './src/db/settings';
+import { hideSplash } from './src/device/deviceServices';
 import type { RootStackParamList, TabParamList } from './src/navigation/types';
 import { AddTransactionScreen } from './src/screens/AddTransactionScreen';
 import { BatteryGuideScreen } from './src/screens/BatteryGuideScreen';
@@ -31,6 +26,7 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { OverviewScreen } from './src/screens/OverviewScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useAppStore } from './src/state/store';
+import { BrandIntro } from './src/ui/BrandMark';
 import { AppBackground } from './src/ui/components';
 import { GlassTabBar } from './src/ui/GlassTabBar';
 import { useTheme } from './src/ui/theme';
@@ -106,7 +102,6 @@ function MainApp() {
 }
 
 function Root() {
-  const t = useTheme();
   const onboarded = useAppStore(s => s.onboarded);
   const appLockEnabled = useAppStore(s => s.appLockEnabled);
   const unlocked = useAppStore(s => s.unlocked);
@@ -140,21 +135,34 @@ function Root() {
     return () => sub.remove();
   }, []);
 
+  // Cold-start brand intro: takes over from the native splash, then reveals the app.
+  const [introDone, setIntroDone] = useState(false);
+  const releaseNativeSplash = useCallback(() => hideSplash(), []);
+  const finishIntro = useCallback(() => setIntroDone(true), []);
+
+  let screen: React.ReactNode;
   if (onboarded === null) {
-    return (
-      <View style={styles.center}>
-        <AppBackground />
-        <ActivityIndicator color={t.primary} />
-      </View>
-    );
+    screen = <AppBackground />;
+  } else if (!onboarded) {
+    screen = <OnboardingScreen />;
+  } else if (appLockEnabled && !unlocked) {
+    screen = <LockScreen />;
+  } else {
+    screen = <MainApp />;
   }
-  if (!onboarded) {
-    return <OnboardingScreen />;
-  }
-  if (appLockEnabled && !unlocked) {
-    return <LockScreen />;
-  }
-  return <MainApp />;
+
+  return (
+    <View style={styles.root}>
+      {screen}
+      {!introDone && (
+        <BrandIntro
+          ready={onboarded !== null}
+          onFirstFrame={releaseNativeSplash}
+          onDone={finishIntro}
+        />
+      )}
+    </View>
+  );
 }
 
 export default function App() {
@@ -182,5 +190,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1 },
 });

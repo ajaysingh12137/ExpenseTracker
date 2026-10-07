@@ -112,6 +112,8 @@ dependencies {
     implementation("com.facebook.react:react-android")
     // App lock (BiometricPrompt with device-credential fallback).
     implementation("androidx.biometric:biometric:1.1.0")
+    // Native launch splash (Android 12 API, back-ported to API 23+).
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

@@ -72,6 +72,12 @@ docs/PRD.md docs/ROADMAP.md
   ListRow, IconBadge, CategoryPicker…), `GlassTabBar.tsx`. Icons: `lucide-react-native` only
   (needs `react-native-svg`); category icon/colour from `categoryVisuals.ts`, not the DB emoji.
   Screens hide native headers and render `Screen title/onBack` themselves.
+- Brand: mark = ₹ + gold spark on indigo→violet squircle. Source of truth
+  `scripts/brand/design.js`; regenerate launcher icons (adaptive + monochrome + legacy PNGs),
+  splash icon and `docs/brand/*` with `npm i --no-save sharp && node scripts/brand/generate.js`.
+  `src/ui/BrandMark.tsx` mirrors the same geometry for in-app use. Launch flow: native
+  splash (core-splashscreen, `Theme.App.Starting`) held via `SplashGate` until JS calls
+  `hideSplash()` (3 s cap) → `BrandIntro` (identical first frame) animates out over the app.
 - Changing a spec requires a native rebuild (codegen). Don't rename module/spec names casually.
 
 ## Commands (Windows dev machine)

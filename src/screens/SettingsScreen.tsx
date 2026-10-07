@@ -13,7 +13,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { isAiEnabled } from '../ai/aiFallback';
 import { useCaptureStatus } from '../capture/CaptureProvider';
 import {
@@ -25,6 +25,7 @@ import { deleteSetting, setSetting, SettingKeys } from '../db/settings';
 import { authenticate, canUseAppLock } from '../device/deviceServices';
 import type { RootStackParamList } from '../navigation/types';
 import { useAppStore } from '../state/store';
+import { BrandLockup } from '../ui/BrandMark';
 import {
   Chip,
   Divider,
@@ -225,13 +226,16 @@ export function SettingsScreen() {
         />
       </GlassCard>
 
-      <Text style={[type.caption, styles.footer, { color: t.textSubtle }]}>
-        ExpenseTracker · version 0.0.1
-      </Text>
+      <View style={styles.footer}>
+        <BrandLockup size={44} />
+        <Text style={[type.caption, { color: t.textSubtle }]}>
+          Version 0.0.1
+        </Text>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  footer: { textAlign: 'center', marginTop: spacing.lg },
+  footer: { alignItems: 'center', gap: spacing.sm, marginTop: spacing.xl },
 });
