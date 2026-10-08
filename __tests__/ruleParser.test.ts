@@ -83,6 +83,47 @@ describe('parseTransactionText', () => {
     });
   });
 
+  test('amount without currency marker + "trf to" payee + reference (SBI-style wording)', () => {
+    const r = parseTransactionText(
+      'AD-SBIUPI',
+      'Dear UPI user A/C X1234 debited by 1.0 on date 07Oct26 trf to RAMESH STORE Refno 412345678901. If not u? call 1800111109. -SBI',
+      NOW,
+    );
+    expect(r).toMatchObject({
+      amountPaise: 100,
+      direction: 'debit',
+      merchantRaw: 'RAMESH STORE',
+      accountHint: '1234',
+      reference: '412345678901',
+    });
+    expect(r!.confidence).toBeGreaterThanOrEqual(CONFIDENCE_FLOOR);
+  });
+
+  test('reference forms: UPI Ref, UPI:, RRN, UTR, Txn ID', () => {
+    const cases: Array<[string, string]> = [
+      ['Paid ₹1 to Shop. UPI Ref No 512345678901', '512345678901'],
+      [
+        'Acct XX12 debited for Rs 1.00; Shop credited. UPI:612345678901',
+        '612345678901',
+      ],
+      ['Rs 500 credited. RRN 712345678901', '712345678901'],
+      ['INR 2,000 received. UTR: SBIN0123456789', 'SBIN0123456789'],
+      ['Paid Rs 99 to X. Txn ID T2410081234567', 'T2410081234567'],
+    ];
+    for (const [text, ref] of cases) {
+      expect(parseTransactionText('Alert', text, NOW)?.reference).toBe(ref);
+    }
+  });
+
+  test('a UPI ID or the word "UPI user" is never taken as a reference', () => {
+    const r = parseTransactionText(
+      'Bank',
+      'Dear UPI user, Rs 10 sent to abc@okaxis',
+      NOW,
+    );
+    expect(r?.reference).toBeNull();
+  });
+
   test('refund is a credit', () => {
     const r = parseTransactionText(
       'Bank alert',

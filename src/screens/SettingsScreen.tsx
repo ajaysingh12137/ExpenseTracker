@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
+  Activity,
   BatteryCharging,
   BellRing,
   CloudOff,
@@ -173,6 +174,15 @@ export function SettingsScreen() {
           title="Apps to read from"
           subtitle="Bank, UPI and SMS app list"
           onPress={() => navigation.navigate('CaptureSources')}
+          chevron
+        />
+        <Divider />
+        <ListRow
+          icon={Activity}
+          iconColor="#14B8A6"
+          title="Capture health"
+          subtitle="See which apps are being read and anything skipped"
+          onPress={() => navigation.navigate('CaptureHealth')}
           chevron
         />
         <Divider />

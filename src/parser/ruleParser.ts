@@ -11,12 +11,21 @@ import type { Direction, ParsedTransaction } from '../domain/types';
  * Bump PARSER_VERSION whenever behaviour changes; raw captures parsed with an older version
  * can then be re-parsed.
  */
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 /** Below this the result is treated as unparsed and handed to the AI fallback. */
 export const CONFIDENCE_FLOOR = 0.75;
 
 const AMOUNT = /(?:₹|\bRs\.?|\bINR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/gi;
+
+// Some bank SMS omit the currency: "A/C X1234 debited by 1.0 on date 07Oct26".
+const VERB_AMOUNT =
+  /\b(?:debited|credited|paid|sent|received|spent|withdrawn|transferred|deposited)\s+(?:by|for|of|with)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\b/i;
+
+// Payment reference: UPI Ref / RRN / UTR / Txn ID. Must contain at least 6 digits so words like
+// "UPI user" or a VPA never qualify.
+const REFERENCE =
+  /\b(?:UPI\s*(?:Ref(?:erence)?|txn|transaction)?\s*(?:No\.?|ID|#|number)?|Ref(?:erence)?\s*(?:No\.?|ID|#|number)?|Refno|RRN|UTR|Txn\s*(?:ID|No\.?|#))\s*[:.#-]?\s*([A-Za-z0-9]{6,24})/gi;
 
 // Amounts that describe state, not the transaction itself.
 const NON_TXN_AMOUNT_CONTEXT =
@@ -50,6 +59,11 @@ const ACCOUNT_HINT =
   /\b(?:a\/c|acct|account|card)\s*(?:no\.?|number|ending(?:\s+with)?)?\s*[:#-]?\s*(?:[x*•]+\s*)?(\d{3,4})\b/i;
 
 const MERCHANT_PATTERNS: Array<{ re: RegExp; direction?: Direction }> = [
+  // "trf to MERCHANT Refno 123" (common SBI-style wording)
+  {
+    re: /\btrf\s+to\s+([A-Za-z0-9][A-Za-z0-9 &.'_-]{1,40}?)(?=\s+(?:on|via|ref\w*|rrn|utr|upi)\b|[.,;(]|$)/i,
+    direction: 'debit',
+  },
   { re: /\bto\s+VPA\s+([a-z0-9._-]+@[a-z0-9.]+)/i, direction: 'debit' },
   { re: /\bfrom\s+VPA\s+([a-z0-9._-]+@[a-z0-9.]+)/i, direction: 'credit' },
   {
@@ -108,6 +122,26 @@ function findTransactionAmount(text: string): number | null {
     const paise = parseRupeesToPaise(match[1]);
     if (paise !== null && paise > 0) {
       return paise;
+    }
+  }
+  const verb = VERB_AMOUNT.exec(text);
+  if (verb) {
+    const paise = parseRupeesToPaise(verb[1]);
+    if (paise !== null && paise > 0) {
+      return paise;
+    }
+  }
+  return null;
+}
+
+/** Normalized payment reference, or null. Same payment, same reference across apps. */
+export function findReference(text: string): string | null {
+  REFERENCE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = REFERENCE.exec(text)) !== null) {
+    const candidate = match[1].toUpperCase();
+    if ((candidate.match(/\d/g) ?? []).length >= 6) {
+      return candidate;
     }
   }
   return null;
@@ -245,6 +279,7 @@ export function parseTransactionText(
   const merchantRaw = findMerchant(normalizeText(body) || text, direction);
   const accountHint = findAccountHint(text);
   const occurredAt = findDate(text, now);
+  const reference = findReference(text);
 
   let confidence = 0;
   if (amountPaise !== null) {
@@ -267,5 +302,6 @@ export function parseTransactionText(
     accountHint,
     occurredAt,
     confidence: Math.round(confidence * 100) / 100,
+    reference,
   };
 }

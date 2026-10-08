@@ -23,6 +23,7 @@ class TransactionListenerService : NotificationListenerService() {
 
   override fun onListenerConnected() {
     super.onListenerConnected()
+    CaptureStats.onConnected(this, System.currentTimeMillis())
     io.execute { purgeIfDue(force = true) }
 
     // Recover alerts posted while we were unbound (after reboot, rebind, or first grant) that
@@ -43,17 +44,31 @@ class TransactionListenerService : NotificationListenerService() {
     if (!CaptureConfig.isAllowed(this, sbn.packageName)) return
 
     // Rejected notifications never leave this stack frame.
-    val captured = runCatching { TransactionFilter.evaluate(sbn) }.getOrNull()
-    if (captured.isNullOrEmpty()) return
+    val evaluation = runCatching { TransactionFilter.evaluate(sbn) }.getOrNull() ?: return
+    val packageName = sbn.packageName
 
     io.execute {
       runCatching {
         val queue = CaptureQueue.get(this)
-        var added = false
-        for (item in captured) {
-          if (queue.enqueue(item)) added = true
+        var added = 0
+        var duplicates = 0
+        for (item in evaluation.captured) {
+          if (queue.enqueue(item)) added++ else duplicates++
         }
-        if (added) CaptureSignal.notifyCaptured()
+        if (added > 0) CaptureSignal.notifyCaptured()
+        // Counts only, never text: powers the in-app "Capture health" screen.
+        CaptureStats.record(
+          this,
+          packageName,
+          mapOf(
+            CaptureStats.Field.SEEN to 1,
+            CaptureStats.Field.CAPTURED to added,
+            CaptureStats.Field.DUPLICATE to duplicates,
+            CaptureStats.Field.OTP to evaluation.droppedOtp,
+            CaptureStats.Field.OTHER to evaluation.droppedOther,
+          ),
+          System.currentTimeMillis(),
+        )
         purgeIfDue(force = false)
       }.onFailure(::logError)
     }
@@ -69,12 +84,14 @@ class TransactionListenerService : NotificationListenerService() {
 
   override fun onListenerDisconnected() {
     super.onListenerDisconnected()
+    CaptureStats.onDisconnected(this, System.currentTimeMillis())
     // Ask the system to bind us again (API 24+, matches minSdk). Has no effect if the user
     // revoked notification access.
     requestRebind(ComponentName(this, TransactionListenerService::class.java))
   }
 
   override fun onDestroy() {
+    CaptureStats.listenerConnected = false
     io.shutdown()
     super.onDestroy()
   }

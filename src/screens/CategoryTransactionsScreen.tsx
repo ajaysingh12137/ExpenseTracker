@@ -22,24 +22,25 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CategoryTransactions'>;
 
 export function CategoryTransactionsScreen({ route, navigation }: Props) {
   const { categoryId, name, year, month } = route.params;
+  const direction = route.params.direction ?? 'debit';
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const [from, to] = monthRange(year, month);
   const list = useDbQuery(
-    () => listConfirmed({ from, to, categoryId }),
-    [from, categoryId],
+    () => listConfirmed({ from, to, categoryId, direction }),
+    [from, categoryId, direction],
   );
-  const total = (list.data ?? []).reduce(
-    (sum, tx) => sum + (tx.direction === 'debit' ? tx.amountPaise : 0),
-    0,
-  );
+  const total = (list.data ?? []).reduce((sum, tx) => sum + tx.amountPaise, 0);
 
   return (
     <Screen
       scroll={false}
       onBack={navigation.goBack}
       title={name}
-      subtitle={monthLabel(year, month)}
+      subtitle={`${direction === 'debit' ? 'Spent' : 'Received'} · ${monthLabel(
+        year,
+        month,
+      )}`}
     >
       <FlatList
         data={list.data ?? []}

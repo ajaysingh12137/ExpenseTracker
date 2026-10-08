@@ -59,7 +59,8 @@ capture works on real devices.
 | AI fallback | MVP | Only for text the rules cannot parse; strict JSON output |
 | Draft inbox | MVP | Swipe to confirm; tap to edit amount, merchant, category |
 | Manual and voice entry | MVP | Fallback for cash and missed transactions |
-| Monthly overview | MVP | Category breakdown, trend vs last month, top merchants |
+| Monthly overview | MVP | Category breakdown, trend vs last month, top merchants; spent and received shown separately, never netted |
+| Capture health | MVP | Per-app counts of alerts received / captured / skipped (counts only, no text), listener status, self-reconnect |
 | Consent and disclosure | MVP | Clear explanation before notification access is requested |
 | App lock | MVP | Biometric or device PIN |
 | Battery-optimization guide | MVP | Required step for Xiaomi, Oppo, Vivo, Samsung |
@@ -224,7 +225,7 @@ submission.
 | Area | Requirement |
 | --- | --- |
 | Reliability | No transaction lost once queued, across app kill, reboot, app update or force-stop. Notifications that arrive while the listener is unbound are recovered only if still in the shade |
-| Dedup | Identical repeat payments (same amount, same merchant) must stay separate transactions. Possible duplicates are flagged in the inbox, never merged silently |
+| Dedup | One payment reported by several apps (bank SMS + bank app + UPI app) becomes ONE transaction with several sources: matched by payment reference (UPI ref / RRN / UTR), or same amount + direction within 15 min from a *different* app. Identical repeat payments from the same app stay separate (flagged as possible duplicates). Merges are visible ("2 sources") and can be split by the user, never silent |
 | Background | Listener rebinds after disconnect; works with the app closed |
 | Battery | No polling or wake locks; event-driven only |
 | Offline | Every feature except AI fallback and sync works with no internet |

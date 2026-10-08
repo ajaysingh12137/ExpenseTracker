@@ -69,6 +69,17 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
       value TEXT NOT NULL
     )`,
   ],
+  // v2: one payment, several alerts (bank SMS + bank app + UPI app) -> one transaction.
+  [
+    'ALTER TABLE raw_captures ADD COLUMN transaction_id INTEGER',
+    'ALTER TABLE raw_captures ADD COLUMN no_merge INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE transactions ADD COLUMN reference TEXT',
+    'CREATE INDEX idx_raw_tx ON raw_captures(transaction_id)',
+    'CREATE INDEX idx_tx_match ON transactions(amount_paise, direction, occurred_at)',
+    'CREATE INDEX idx_tx_reference ON transactions(reference)',
+    `UPDATE raw_captures SET transaction_id =
+       (SELECT t.id FROM transactions t WHERE t.raw_capture_id = raw_captures.id)`,
+  ],
 ];
 
 let db: DB | null = null;

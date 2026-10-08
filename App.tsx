@@ -22,6 +22,7 @@ import { getThemeMode, hideSplash } from './src/device/deviceServices';
 import type { RootStackParamList, TabParamList } from './src/navigation/types';
 import { AddTransactionScreen } from './src/screens/AddTransactionScreen';
 import { BatteryGuideScreen } from './src/screens/BatteryGuideScreen';
+import { CaptureHealthScreen } from './src/screens/CaptureHealthScreen';
 import { CaptureSourcesScreen } from './src/screens/CaptureSourcesScreen';
 import { CategoryTransactionsScreen } from './src/screens/CategoryTransactionsScreen';
 import { EditTransactionScreen } from './src/screens/EditTransactionScreen';
@@ -101,6 +102,7 @@ function MainApp() {
           component={CategoryTransactionsScreen}
         />
         <Stack.Screen name="CaptureSources" component={CaptureSourcesScreen} />
+        <Stack.Screen name="CaptureHealth" component={CaptureHealthScreen} />
         <Stack.Screen name="BatteryGuide" component={BatteryGuideScreen} />
       </Stack.Navigator>
     </CaptureProvider>

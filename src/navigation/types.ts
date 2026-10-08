@@ -16,7 +16,9 @@ export type RootStackParamList = {
     name: string;
     year: number;
     month: number;
+    direction?: 'debit' | 'credit';
   };
   CaptureSources: undefined;
+  CaptureHealth: undefined;
   BatteryGuide: undefined;
 };

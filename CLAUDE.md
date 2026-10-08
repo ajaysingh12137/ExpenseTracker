@@ -43,9 +43,16 @@ docs/PRD.md docs/ROADMAP.md
   notifications are opt-in only, and may need removing before Play submission (PRD open item).
 - **Native durable queue + ack**; JS `persist` must be durable and idempotent (upsert on id,
   unique `dedup_key`). At-least-once delivery.
-- **Repeat payments stay separate (PRD).** Native dedup only drops exact reposts (same content
-  AND same event time). Near-identical payments within 3 min are flagged `possible_duplicate_of`
-  in the inbox, never merged.
+- **One payment, many alerts -> one transaction (PRD Dedup).** `pipeline/matching.ts`: same
+  payment reference, or same amount + direction within 15 min from a different app, links the
+  new raw capture to the existing transaction (`raw_captures.transaction_id`). Same app twice =
+  two payments (only flagged `possible_duplicate_of`). Edit screen lists sources; "Split" sets
+  `no_merge` and re-processes. Native dedup still drops exact reposts only.
+- **Spent and received are never netted.** Queries take a `direction`; Home, Inbox, Insights
+  and category lists show them separately.
+- **Capture health** (`CaptureStats.kt`, Settings → Capture health): per-package counts and
+  timestamps only. App silently calls `rebindListener()` on foreground if access is granted but
+  the listener is unbound.
 - **Raw text kept separate from transactions**; `PARSER_VERSION` bump re-parses rule drafts.
 - **Capture master switch** (`CaptureConfig.isCaptureEnabled`) is off until the disclosure is
   accepted; Settings can turn it off without revoking system access.
@@ -56,7 +63,9 @@ docs/PRD.md docs/ROADMAP.md
 
 ## Privacy rules (non-negotiable)
 - Never log notification content (native or JS, debug or release). Log exception class names only.
-- OTP filter runs first; when unsure, drop. Never store OTPs.
+- OTP filter runs first; never store OTPs. An OTP-family word *with* a 4–8 digit code drops the
+  message; a "never share your OTP" footer without a code does not (real debit alerts survive).
+  When unsure, drop.
 - Account/card numbers redacted natively to last 4 before storage; AI text further redacted.
 - No secrets in the app bundle. `src/config.ts` holds only a URL and a publishable key.
 - All stores excluded from cloud backup and device transfer (`res/xml/data_extraction_rules.xml`).

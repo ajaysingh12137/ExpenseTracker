@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -168,6 +169,57 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
         putBoolean("captureEnabled", CaptureConfig.isCaptureEnabled(context))
       },
     )
+  }
+
+  override fun getCaptureHealth(promise: Promise) {
+    val context = reactApplicationContext
+    val sources = Arguments.createArray()
+    for (stat in CaptureStats.sources(context)) {
+      sources.pushMap(
+        Arguments.createMap().apply {
+          putString("packageName", stat.packageName)
+          putDouble("seen", stat.seen.toDouble())
+          putDouble("captured", stat.captured.toDouble())
+          putDouble("duplicate", stat.duplicate.toDouble())
+          putDouble("droppedOtp", stat.droppedOtp.toDouble())
+          putDouble("droppedOther", stat.droppedOther.toDouble())
+          putDouble("lastSeenAt", stat.lastSeenAt.toDouble())
+          putDouble("lastCapturedAt", stat.lastCapturedAt.toDouble())
+        },
+      )
+    }
+    promise.resolve(
+      Arguments.createMap().apply {
+        putBoolean("permissionGranted", hasListenerAccess(context))
+        putBoolean("listenerConnected", CaptureStats.listenerConnected)
+        putDouble("connectedAt", CaptureStats.connectedAt(context).toDouble())
+        putDouble("disconnectedAt", CaptureStats.disconnectedAt(context).toDouble())
+        putDouble("statsSince", CaptureStats.since(context).toDouble())
+        putArray("sources", sources)
+      },
+    )
+  }
+
+  override fun resetCaptureStats(promise: Promise) {
+    CaptureStats.reset(reactApplicationContext)
+    promise.resolve(null)
+  }
+
+  /**
+   * Asks Android to bind the listener again. OEM battery managers sometimes unbind it without
+   * telling anyone; this is the supported way back (API 24+). No effect without access.
+   */
+  override fun rebindListener(promise: Promise) {
+    if (!hasListenerAccess(reactApplicationContext)) {
+      promise.resolve(false)
+      return
+    }
+    try {
+      NotificationListenerService.requestRebind(listenerComponent)
+      promise.resolve(true)
+    } catch (_: Exception) {
+      promise.resolve(false)
+    }
   }
 
   override fun resetCaptureConfig(promise: Promise) {

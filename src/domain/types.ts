@@ -19,6 +19,8 @@ export type ParsedTransaction = {
   occurredAt: number | null;
   /** 0..1. Rule output below CONFIDENCE_FLOOR is treated as unparsed. */
   confidence: number;
+  /** UPI ref / RRN / UTR / txn id. The same payment reported by two apps shares it. */
+  reference?: string | null;
   categoryGuess?: string | null;
 };
 
@@ -44,4 +46,7 @@ export type Transaction = {
   parsedBy: ParsedBy;
   possibleDuplicateOf: number | null;
   note: string | null;
+  reference: string | null;
+  /** How many alerts (bank SMS, bank app, UPI app...) reported this same payment. */
+  sourceCount: number;
 };

@@ -18,25 +18,49 @@ data class CapturedNotification(
   val contentKey: String,
 )
 
+/** Result of classifying one notification. Drop reasons are counts only, never text. */
+class Evaluation {
+  val captured = mutableListOf<CapturedNotification>()
+  var droppedOtp = 0
+  var droppedOther = 0
+}
+
 /**
  * Pure classification. Nothing in here touches storage; anything rejected is simply dropped
  * and only ever existed in memory.
  */
 object TransactionFilter {
 
-  // Checked first and unconditionally. Errs on the side of discarding: a real transaction
-  // alert that also mentions "OTP" (e.g. a "never share your OTP" footer) is dropped too.
+  // OTP-family words.
+  private const val OTP_WORD =
+    "(?:OTP|one[\\s-]?time[\\s-]?pass(?:word|code)?|verification\\s+code|security\\s+code|" +
+      "auth(?:entication)?\\s+code|login\\s+code|confirmation\\s+code|passcode)"
+
+  // Checked first and unconditionally. A message is an OTP when it has an OTP-family word
+  // *together with a code*: "OTP is 482913", "482913 is your OTP", "OTP for txn of Rs 500 at
+  // X is 482913". A "Never share your OTP" footer on a debit alert has no code, so that alert
+  // is kept: nothing secret can be stored from it. Ambiguous cases still drop.
   private val OTP_PATTERNS = listOf(
-    Regex("\\bOTP\\b", RegexOption.IGNORE_CASE),
-    Regex("one[\\s-]?time[\\s-]?pass(word|code)?", RegexOption.IGNORE_CASE),
-    Regex("\\b(verification|security|auth(entication)?|login|confirmation)\\s+code\\b", RegexOption.IGNORE_CASE),
-    Regex("\\b(code|pin|passcode)\\s*(is|:)\\s*\\d{4,8}\\b", RegexOption.IGNORE_CASE),
-    Regex("\\b\\d{4,8}\\s+is\\s+(your|the)\\b", RegexOption.IGNORE_CASE),
+    // "OTP: 1234", "OTP is 123456", "OTP-123456"
+    Regex("\\b$OTP_WORD\\b\\W{0,12}(?:is\\W{0,4})?\\d{4,8}\\b", RegexOption.IGNORE_CASE),
+    // "OTP for txn of Rs 500 at X is 482913" (code later in the same sentence)
+    Regex("\\b$OTP_WORD\\b.{0,80}?\\b(?:is|:)\\s*\\d{4,8}\\b", RegexOption.IGNORE_CASE),
+    // "482913 is your OTP", "Use 482913 as your verification code"
+    Regex("\\b\\d{4,8}\\b\\W{0,6}(?:is|as)\\s+(?:your|the)?\\s*$OTP_WORD", RegexOption.IGNORE_CASE),
+    // "code is 1234", "PIN: 1234"
+    Regex("\\b(?:code|pin|passcode)\\s*(?:is|:)\\s*\\d{4,8}\\b", RegexOption.IGNORE_CASE),
   )
 
   // A currency marker immediately followed by an amount: "₹500", "Rs.1,200.50", "INR 99".
   private val CURRENCY_AMOUNT = Regex(
     "(₹|\\bRs\\.?|\\bINR)\\s?[0-9][0-9,]*(\\.[0-9]{1,2})?",
+    RegexOption.IGNORE_CASE,
+  )
+
+  // Some bank SMS omit the currency: "A/C X1234 debited by 1.0 on date ...".
+  private val VERB_AMOUNT = Regex(
+    "\\b(debited|credited|paid|sent|received|spent|withdrawn|transferred|deposited)\\s+" +
+      "(?:by|for|of|with)?\\s*[0-9][0-9,]*(\\.[0-9]{1,2})?\\b",
     RegexOption.IGNORE_CASE,
   )
 
@@ -58,7 +82,8 @@ object TransactionFilter {
   fun isOtp(text: String): Boolean = OTP_PATTERNS.any { it.containsMatchIn(text) }
 
   fun isTransactionLike(text: String): Boolean =
-    CURRENCY_AMOUNT.containsMatchIn(text) && TRANSACTION_KEYWORD.containsMatchIn(text)
+    TRANSACTION_KEYWORD.containsMatchIn(text) &&
+      (CURRENCY_AMOUNT.containsMatchIn(text) || VERB_AMOUNT.containsMatchIn(text))
 
   /** PRD: never store full account numbers; keep only the last 4 digits. */
   fun redactAccountNumbers(text: String): String =
@@ -67,25 +92,27 @@ object TransactionFilter {
       .replace(CARD_LENGTH_DIGITS) { m -> "XX${m.value.takeLast(4)}" }
 
   /**
-   * Returns zero or more capture candidates. MessagingStyle notifications (SMS apps) can carry
-   * several messages; each one is classified separately so one OTP doesn't hide a debit alert
-   * next to it, and an OTP is never stored because a neighbour looked like a transaction.
-   * Caller is responsible for the allowlist check.
+   * Classifies a notification into zero or more capture candidates. MessagingStyle
+   * notifications (SMS apps) can carry several messages; each one is classified separately so
+   * one OTP doesn't hide a debit alert next to it, and an OTP is never stored because a
+   * neighbour looked like a transaction. Caller is responsible for the allowlist check.
    */
-  fun evaluate(sbn: StatusBarNotification): List<CapturedNotification> {
-    val notification = sbn.notification ?: return emptyList()
-    if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return emptyList()
+  fun evaluate(sbn: StatusBarNotification): Evaluation {
+    val evaluation = Evaluation()
+    val notification = sbn.notification ?: return evaluation
+    if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return evaluation
     // "Payment in progress" style status notifications; the final alert is a normal one.
-    if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return emptyList()
+    if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return evaluation
 
-    val extras = notification.extras ?: return emptyList()
+    val extras = notification.extras ?: return evaluation
     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
 
     val messages = messagingStyleTexts(extras)
     if (messages.isNotEmpty()) {
-      return messages.mapNotNull { (text, time) ->
-        candidate(sbn, title, text, if (time > 0) time else notification.`when`)
+      for ((text, time) in messages) {
+        candidate(sbn, title, text, if (time > 0) time else notification.`when`, evaluation)
       }
+      return evaluation
     }
 
     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
@@ -97,7 +124,8 @@ object TransactionFilter {
       else -> "$text\n$bigText"
     }
     if (body.isNotEmpty()) {
-      return listOfNotNull(candidate(sbn, title, body, notification.`when`))
+      candidate(sbn, title, body, notification.`when`, evaluation)
+      return evaluation
     }
 
     // InboxStyle: one line per message, only used when there is no main text.
@@ -105,7 +133,8 @@ object TransactionFilter {
       ?.map { it.toString().trim() }
       ?.filter { it.isNotEmpty() }
       .orEmpty()
-    return lines.mapNotNull { candidate(sbn, title, it, notification.`when`) }
+    for (line in lines) candidate(sbn, title, line, notification.`when`, evaluation)
+    return evaluation
   }
 
   private fun candidate(
@@ -113,17 +142,24 @@ object TransactionFilter {
     title: String,
     rawBody: String,
     eventTime: Long,
-  ): CapturedNotification? {
+    evaluation: Evaluation,
+  ) {
     val combinedRaw = "$title\n$rawBody"
-    if (isOtp(combinedRaw)) return null
-    if (!isTransactionLike(combinedRaw)) return null
+    if (isOtp(combinedRaw)) {
+      evaluation.droppedOtp++
+      return
+    }
+    if (!isTransactionLike(combinedRaw)) {
+      evaluation.droppedOther++
+      return
+    }
 
     val safeTitle = redactAccountNumbers(title)
     val body = redactAccountNumbers(rawBody)
     val contentKey = sha256("${sbn.packageName}\u0000$safeTitle\u0000$body")
     val dedupKey = sha256("$contentKey\u0000$eventTime")
 
-    return CapturedNotification(
+    evaluation.captured += CapturedNotification(
       packageName = sbn.packageName,
       title = safeTitle,
       body = body,

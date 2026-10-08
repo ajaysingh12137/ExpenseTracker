@@ -3,6 +3,8 @@ import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   BellRing,
   ChartPie,
   Inbox,
@@ -12,12 +14,19 @@ import {
   Receipt,
   TrendingDown,
   TrendingUp,
+  Unplug,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCaptureStatus } from '../capture/CaptureProvider';
-import { countDrafts, listConfirmed, sumDebits } from '../db/repository';
+import {
+  countDrafts,
+  listConfirmed,
+  sumByDirection,
+  sumDebits,
+} from '../db/repository';
+import type { Direction } from '../domain/types';
 import {
   dayRange,
   formatDateTime,
@@ -40,6 +49,7 @@ import {
   ListRow,
   Screen,
   SectionTitle,
+  Segmented,
 } from '../ui/components';
 import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
@@ -66,16 +76,26 @@ export function HomeScreen() {
   // Same point in last month, so the comparison is fair mid-month.
   const prevSameDay = Math.min(prevFrom + (Date.now() - monthFrom), monthFrom);
 
+  const [recentDirection, setRecentDirection] = useState<Direction>('debit');
   const today = useDbQuery(() => sumDebits(todayFrom, todayTo), [todayFrom]);
   const month = useDbQuery(() => sumDebits(monthFrom, monthTo), [monthFrom]);
+  const received = useDbQuery(
+    () => sumByDirection(monthFrom, monthTo, 'credit'),
+    [monthFrom],
+  );
   const lastMonthToDate = useDbQuery(
     () => sumDebits(prevFrom, prevSameDay),
     [prevFrom, todayFrom],
   );
   const drafts = useDbQuery(countDrafts, []);
   const recent = useDbQuery(
-    () => listConfirmed({ from: monthFrom - 60 * 864e5, to: todayTo }),
-    [monthFrom, todayTo],
+    () =>
+      listConfirmed({
+        from: monthFrom - 60 * 864e5,
+        to: todayTo,
+        direction: recentDirection,
+      }),
+    [monthFrom, todayTo, recentDirection],
   );
 
   const current = month.data ?? 0;
@@ -106,6 +126,23 @@ export function HomeScreen() {
             subtitle="Allow notification access so payments are logged automatically."
           />
           <Button label="Allow access" compact onPress={status.openSettings} />
+        </GlassCard>
+      )}
+      {status.permissionGranted && status.listenerConnected === false && (
+        <GlassCard strong>
+          <ListRow
+            icon={Unplug}
+            iconColor={t.warning}
+            title="Your phone stopped capture"
+            subtitle="Android paused the payment listener, usually to save battery. Reconnect, then check battery settings."
+          />
+          <Button
+            label="Reconnect"
+            compact
+            onPress={() => {
+              status.reconnect().catch(() => {});
+            }}
+          />
         </GlassCard>
       )}
       {status.captureEnabled === false && (
@@ -149,6 +186,13 @@ export function HomeScreen() {
             <Text style={styles.heroStatLabel}>Today</Text>
             <Text style={styles.heroStatValue}>
               {formatPaise(today.data ?? 0)}
+            </Text>
+          </View>
+          <View style={styles.heroDivider} />
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>Received</Text>
+            <Text style={styles.heroStatValue}>
+              {formatPaise(received.data ?? 0)}
             </Text>
           </View>
           <View style={styles.heroDivider} />
@@ -215,12 +259,28 @@ export function HomeScreen() {
       >
         Recent
       </SectionTitle>
+      <Segmented
+        options={[
+          { value: 'debit', label: 'Spent', icon: ArrowUpRight },
+          { value: 'credit', label: 'Received', icon: ArrowDownLeft },
+        ]}
+        value={recentDirection}
+        onChange={setRecentDirection}
+      />
       <GlassCard>
         {(recent.data ?? []).length === 0 ? (
           <Empty
             icon={Receipt}
-            title="No expenses yet"
-            message="Make a UPI payment or add one by hand. Confirmed expenses show up here."
+            title={
+              recentDirection === 'debit'
+                ? 'No spending yet'
+                : 'Nothing received yet'
+            }
+            message={
+              recentDirection === 'debit'
+                ? 'Make a UPI payment or add one by hand. Confirmed expenses show up here.'
+                : 'Money you receive (salary, refunds, UPI from friends) shows up here.'
+            }
           />
         ) : (
           (recent.data ?? []).slice(0, 6).map((tx, index) => (

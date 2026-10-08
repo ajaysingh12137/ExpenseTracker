@@ -2,11 +2,18 @@ import { Platform } from 'react-native';
 import type { EventSubscription } from 'react-native';
 import type {
   CaptureConfig,
+  CaptureHealth,
+  CaptureSourceStat,
   PendingTransactionNotification,
   Spec,
 } from '../../specs/NativeTransactionCapture';
 
-export type { CaptureConfig, PendingTransactionNotification };
+export type {
+  CaptureConfig,
+  CaptureHealth,
+  CaptureSourceStat,
+  PendingTransactionNotification,
+};
 
 /** Saves items to the app's own DB. Must resolve only after the write is durable. */
 export type PersistFn = (
@@ -70,6 +77,18 @@ export async function setCaptureEnabled(enabled: boolean): Promise<void> {
 
 export async function getCaptureConfig(): Promise<CaptureConfig | null> {
   return (await native()?.getCaptureConfig()) ?? null;
+}
+
+export async function getCaptureHealth(): Promise<CaptureHealth | null> {
+  return (await native()?.getCaptureHealth()) ?? null;
+}
+
+export async function resetCaptureStats(): Promise<void> {
+  await native()?.resetCaptureStats();
+}
+
+export async function rebindListener(): Promise<boolean> {
+  return (await native()?.rebindListener()) ?? false;
 }
 
 export async function resetCaptureConfig(): Promise<void> {

@@ -1,6 +1,8 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   ChartPie,
   ChevronLeft,
   ChevronRight,
@@ -11,7 +13,8 @@ import {
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
-import { categoryTotals, sumDebits, topMerchants } from '../db/repository';
+import { categoryTotals, sumByDirection, topMerchants } from '../db/repository';
+import type { Direction } from '../domain/types';
 import type { CategoryTotal } from '../db/repository';
 import { monthLabel, monthRange, shiftMonth } from '../domain/dates';
 import { formatPaise } from '../domain/money';
@@ -26,6 +29,7 @@ import {
   ListRow,
   Screen,
   SectionTitle,
+  Segmented,
 } from '../ui/components';
 import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
 import { useDbQuery } from '../ui/useDbQuery';
@@ -38,9 +42,11 @@ const STROKE = 22;
 function Donut({
   data,
   total,
+  label,
 }: {
   data: ReadonlyArray<CategoryTotal>;
   total: number;
+  label: string;
 }) {
   const t = useTheme();
   const r = (DONUT - STROKE) / 2;
@@ -89,7 +95,7 @@ function Donut({
         </G>
       </Svg>
       <View style={styles.donutCenter} pointerEvents="none">
-        <Text style={[type.caption, { color: t.textMuted }]}>Total spent</Text>
+        <Text style={[type.caption, { color: t.textMuted }]}>{label}</Text>
         <Text style={[type.h2, { color: t.text }]}>{formatPaise(total)}</Text>
       </View>
     </View>
@@ -110,10 +116,25 @@ export function OverviewScreen() {
   const isCurrent =
     period.year === now.getFullYear() && period.month === now.getMonth();
 
-  const total = useDbQuery(() => sumDebits(from, to), [from]);
-  const prevTotal = useDbQuery(() => sumDebits(prevFrom, prevTo), [prevFrom]);
-  const byCategory = useDbQuery(() => categoryTotals(from, to), [from]);
-  const merchants = useDbQuery(() => topMerchants(from, to), [from]);
+  // Spent and received are separate views, never netted together.
+  const [direction, setDirection] = useState<Direction>('debit');
+  const spending = direction === 'debit';
+  const total = useDbQuery(
+    () => sumByDirection(from, to, direction),
+    [from, direction],
+  );
+  const prevTotal = useDbQuery(
+    () => sumByDirection(prevFrom, prevTo, direction),
+    [prevFrom, direction],
+  );
+  const byCategory = useDbQuery(
+    () => categoryTotals(from, to, direction),
+    [from, direction],
+  );
+  const merchants = useDbQuery(
+    () => topMerchants(from, to, direction),
+    [from, direction],
+  );
 
   const current = total.data ?? 0;
   const last = prevTotal.data ?? 0;
@@ -157,22 +178,39 @@ export function OverviewScreen() {
   return (
     <Screen tabs title="Insights" subtitle="Where your money went">
       {monthSwitcher}
+      <Segmented
+        options={[
+          { value: 'debit', label: 'Spent', icon: ArrowUpRight },
+          { value: 'credit', label: 'Received', icon: ArrowDownLeft },
+        ]}
+        value={direction}
+        onChange={setDirection}
+      />
 
       <GlassCard style={styles.donutCard}>
         {categories.length === 0 ? (
           <Empty
             icon={ChartPie}
-            title="No spending yet"
-            message="Confirmed expenses for this month will be broken down here."
+            title={spending ? 'No spending yet' : 'Nothing received yet'}
+            message={
+              spending
+                ? 'Confirmed expenses for this month will be broken down here.'
+                : 'Money received this month (salary, refunds, UPI) will be broken down here.'
+            }
           />
         ) : (
           <>
-            <Donut data={categories} total={current} />
+            <Donut
+              data={categories}
+              total={current}
+              label={spending ? 'Total spent' : 'Total received'}
+            />
             {change !== null ? (
               <View style={styles.trend}>
                 <Chip
                   icon={change > 0 ? TrendingUp : TrendingDown}
-                  tone={change > 0 ? 'warning' : 'success'}
+                  // Spending more is a warning; receiving more is good news.
+                  tone={change > 0 === spending ? 'warning' : 'success'}
                   label={`${Math.abs(change)}% ${
                     change > 0 ? 'more' : 'less'
                   } than ${monthLabel(previous.year, previous.month)}`}
@@ -186,7 +224,7 @@ export function OverviewScreen() {
                   { color: t.textMuted },
                 ]}
               >
-                No spending recorded in{' '}
+                Nothing {spending ? 'spent' : 'received'} in{' '}
                 {monthLabel(previous.year, previous.month)} to compare.
               </Text>
             )}
@@ -216,6 +254,7 @@ export function OverviewScreen() {
                         name: c.name,
                         year: period.year,
                         month: period.month,
+                        direction,
                       })
                     }
                     style={({ pressed }) => [
@@ -269,7 +308,9 @@ export function OverviewScreen() {
 
       {(merchants.data ?? []).length > 0 && (
         <>
-          <SectionTitle>Top merchants</SectionTitle>
+          <SectionTitle>
+            {spending ? 'Top merchants' : 'Top payers'}
+          </SectionTitle>
           <GlassCard>
             {(merchants.data ?? []).map((m, index) => (
               <View key={`${m.name}-${index}`}>

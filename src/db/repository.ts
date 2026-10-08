@@ -15,6 +15,8 @@ import type {
   TransactionStatus,
 } from '../domain/types';
 import { notifyDataChanged } from '../state/store';
+import { findMatch, MATCH_WINDOW_MS } from '../pipeline/matching';
+import type { MatchCandidate } from '../pipeline/matching';
 import { getDb } from './database';
 
 /** Anything with execute(): the DB itself or a transaction handle. */
@@ -36,7 +38,8 @@ const str = (value: Scalar | undefined): string | null =>
   typeof value === 'string' ? value : null;
 
 const TX_SELECT = `
-  SELECT t.*, COALESCE(m.display_name, t.merchant_raw) AS merchant_name
+  SELECT t.*, COALESCE(m.display_name, t.merchant_raw) AS merchant_name,
+    (SELECT COUNT(*) FROM raw_captures r WHERE r.transaction_id = t.id) AS source_count
   FROM transactions t LEFT JOIN merchants m ON m.id = t.merchant_id`;
 
 function toTransaction(row: Row): Transaction {
@@ -55,6 +58,8 @@ function toTransaction(row: Row): Transaction {
     parsedBy: (str(row.parsed_by) ?? 'rule') as ParsedBy,
     possibleDuplicateOf: num(row.possible_duplicate_of),
     note: str(row.note),
+    reference: str(row.reference),
+    sourceCount: Math.max(1, num(row.source_count) ?? 1),
   };
 }
 
@@ -153,15 +158,20 @@ export async function markRaw(
 export async function resetForReparse(currentVersion: number): Promise<void> {
   const db = await getDb();
   await db.transaction(async tx => {
+    const stale = `SELECT id FROM transactions WHERE status = 'draft' AND parsed_by = 'rule'
+      AND raw_capture_id IN (SELECT id FROM raw_captures WHERE parser_version < ?)`;
     await tx.execute(
-      `DELETE FROM transactions WHERE status = 'draft' AND parsed_by = 'rule'
-         AND raw_capture_id IN (SELECT id FROM raw_captures WHERE parser_version < ?)`,
+      `UPDATE raw_captures SET transaction_id = NULL, parse_status = 'pending'
+       WHERE transaction_id IN (${stale})`,
       [currentVersion],
     );
+    await tx.execute(`DELETE FROM transactions WHERE id IN (${stale})`, [
+      currentVersion,
+    ]);
     await tx.execute(
       `UPDATE raw_captures SET parse_status = 'pending'
        WHERE parser_version < ? AND parse_status IN ('ignored', 'failed', 'parsed')
-         AND id NOT IN (SELECT raw_capture_id FROM transactions WHERE raw_capture_id IS NOT NULL)`,
+         AND transaction_id IS NULL`,
       [currentVersion],
     );
   });
@@ -229,17 +239,19 @@ async function findPossibleDuplicate(
   merchantId: number | null,
   occurredAt: number,
 ): Promise<number | null> {
-  if (merchantId === null || amountPaise <= 0) {
+  if (amountPaise <= 0) {
     return null;
   }
   const result = await ex.execute(
     `SELECT id FROM transactions
-     WHERE amount_paise = ? AND direction = ? AND merchant_id = ? AND status != 'ignored'
+     WHERE amount_paise = ? AND direction = ? AND status != 'ignored'
+       AND (? IS NULL OR merchant_id IS NULL OR merchant_id = ?)
        AND occurred_at BETWEEN ? AND ?
      ORDER BY id ASC LIMIT 1`,
     [
       amountPaise,
       direction,
+      merchantId,
       merchantId,
       occurredAt - DUPLICATE_WINDOW_MS,
       occurredAt + DUPLICATE_WINDOW_MS,
@@ -248,12 +260,49 @@ async function findPossibleDuplicate(
   return num(result.rows[0]?.id);
 }
 
+/** Existing transactions that could be the same payment as a new alert. */
+async function matchCandidates(
+  ex: Executor,
+  amountPaise: number,
+  direction: Direction,
+  occurredAt: number,
+  reference: string | null,
+): Promise<MatchCandidate[]> {
+  const result = await ex.execute(
+    `SELECT t.id, t.amount_paise, t.direction, t.occurred_at, t.reference, t.status, t.parsed_by,
+            (SELECT GROUP_CONCAT(r.package_name, '|') FROM raw_captures r
+              WHERE r.transaction_id = t.id) AS packages
+     FROM transactions t
+     WHERE (t.reference IS NOT NULL AND t.reference = ?)
+        OR (t.amount_paise = ? AND t.direction = ? AND t.occurred_at BETWEEN ? AND ?)`,
+    [
+      reference,
+      amountPaise,
+      direction,
+      occurredAt - MATCH_WINDOW_MS,
+      occurredAt + MATCH_WINDOW_MS,
+    ],
+  );
+  return result.rows.map(row => ({
+    id: num(row.id) ?? 0,
+    amountPaise: num(row.amount_paise) ?? 0,
+    direction: (str(row.direction) ?? 'debit') as Direction,
+    occurredAt: num(row.occurred_at) ?? 0,
+    reference: str(row.reference),
+    status: (str(row.status) ?? 'draft') as TransactionStatus,
+    packages: (str(row.packages) ?? '').split('|').filter(Boolean),
+    manual: str(row.parsed_by) === 'manual',
+  }));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Drafts from captures
 
 /**
- * Creates the draft for one raw capture. Identical repeat payments always become separate
- * transactions (PRD); a near-identical earlier one is only *flagged* via possible_duplicate_of.
+ * Turns one raw capture into a transaction, or links it to an existing one when another app
+ * already reported the same payment (see pipeline/matching.ts). Identical repeat payments from
+ * the same app always become separate transactions (PRD); a near-identical earlier one is
+ * only *flagged* via possible_duplicate_of.
  */
 export async function createDraftFromCapture(
   rawId: number,
@@ -261,10 +310,21 @@ export async function createDraftFromCapture(
   parsedBy: 'rule' | 'ai',
   fallbackTime: number,
   knownCategoryIds: ReadonlySet<string>,
-): Promise<void> {
+): Promise<'created' | 'merged'> {
   const db = await getDb();
   const now = Date.now();
+  let outcome: 'created' | 'merged' = 'created';
   await db.transaction(async tx => {
+    const rawRow = (
+      await tx.execute(
+        'SELECT package_name, no_merge FROM raw_captures WHERE id = ?',
+        [rawId],
+      )
+    ).rows[0];
+    const packageName = str(rawRow?.package_name) ?? '';
+    const noMerge = num(rawRow?.no_merge) === 1;
+    const reference = parsed.reference ?? null;
+
     const normalized = parsed.merchantRaw
       ? normalizeMerchant(parsed.merchantRaw)
       : null;
@@ -295,6 +355,56 @@ export async function createDraftFromCapture(
         new Date(fallbackTime).toDateString();
     const when = sameDay ? fallbackTime : occurredAt;
 
+    if (!noMerge) {
+      const match = findMatch(
+        {
+          amountPaise: parsed.amountPaise,
+          direction: parsed.direction,
+          occurredAt: when,
+          reference,
+          packageName,
+        },
+        await matchCandidates(
+          tx,
+          parsed.amountPaise,
+          parsed.direction,
+          when,
+          reference,
+        ),
+      );
+      if (match) {
+        await tx.execute(
+          'UPDATE raw_captures SET transaction_id = ? WHERE id = ?',
+          [match.id, rawId],
+        );
+        // Fill in what the first alert did not say (e.g. the UPI app names the payee, the bank
+        // SMS has the account); never overwrite what is already there or what the user edited.
+        await tx.execute(
+          `UPDATE transactions SET
+             reference = COALESCE(reference, ?),
+             account_hint = COALESCE(account_hint, ?),
+             merchant_raw = COALESCE(merchant_raw, ?),
+             merchant_id = COALESCE(merchant_id, ?),
+             category_id = CASE WHEN status = 'draft' AND merchant_id IS NULL
+                                 AND category_id IN ('uncategorized', 'income')
+                                THEN ? ELSE category_id END,
+             updated_at = ?
+           WHERE id = ?`,
+          [
+            reference,
+            parsed.accountHint,
+            parsed.merchantRaw,
+            merchant?.id ?? null,
+            categoryId,
+            now,
+            match.id,
+          ],
+        );
+        outcome = 'merged';
+        return;
+      }
+    }
+
     const duplicateOf = await findPossibleDuplicate(
       tx,
       parsed.amountPaise,
@@ -303,11 +413,12 @@ export async function createDraftFromCapture(
       when,
     );
 
-    await tx.execute(
+    const inserted = await tx.execute(
       `INSERT OR IGNORE INTO transactions
          (raw_capture_id, amount_paise, direction, merchant_raw, merchant_id, category_id,
-          account_hint, occurred_at, status, parsed_by, possible_duplicate_of, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+          account_hint, occurred_at, status, parsed_by, possible_duplicate_of, reference,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
       [
         rawId,
         parsed.amountPaise,
@@ -319,11 +430,67 @@ export async function createDraftFromCapture(
         when,
         parsedBy,
         duplicateOf,
+        reference,
         now,
         now,
       ],
     );
+    if (inserted.insertId) {
+      await tx.execute(
+        'UPDATE raw_captures SET transaction_id = ? WHERE id = ?',
+        [inserted.insertId, rawId],
+      );
+    }
   });
+  notifyDataChanged();
+  return outcome;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sources (one payment, several alerts)
+
+export type TransactionSource = {
+  rawCaptureId: number;
+  packageName: string;
+  postedAt: number;
+  title: string;
+  body: string;
+  /** The alert the transaction was first created from; cannot be split off. */
+  primary: boolean;
+};
+
+export async function listSources(
+  transactionId: number,
+): Promise<TransactionSource[]> {
+  const db = await getDb();
+  const result = await db.execute(
+    `SELECT r.id, r.package_name, r.posted_at, r.title, r.body,
+            (r.id = t.raw_capture_id) AS is_primary
+     FROM raw_captures r JOIN transactions t ON t.id = r.transaction_id
+     WHERE r.transaction_id = ? ORDER BY is_primary DESC, r.posted_at ASC`,
+    [transactionId],
+  );
+  return result.rows.map(row => ({
+    rawCaptureId: num(row.id) ?? 0,
+    packageName: str(row.package_name) ?? '',
+    postedAt: num(row.posted_at) ?? 0,
+    title: str(row.title) ?? '',
+    body: str(row.body) ?? '',
+    primary: num(row.is_primary) === 1,
+  }));
+}
+
+/**
+ * "These were two different payments": detaches a linked alert and re-processes it as its own
+ * transaction. no_merge stops it from being matched again.
+ */
+export async function splitSource(rawCaptureId: number): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE raw_captures SET transaction_id = NULL, no_merge = 1, parse_status = 'pending'
+     WHERE id = ? AND id NOT IN (SELECT raw_capture_id FROM transactions WHERE raw_capture_id IS NOT NULL)`,
+    [rawCaptureId],
+  );
   notifyDataChanged();
 }
 
@@ -370,11 +537,16 @@ export async function listConfirmed(options: {
   from: number;
   to: number;
   categoryId?: string;
+  direction?: Direction;
 }): Promise<Transaction[]> {
   const db = await getDb();
   const params: Scalar[] = [options.from, options.to];
   let where =
     "t.status = 'confirmed' AND t.occurred_at >= ? AND t.occurred_at < ?";
+  if (options.direction) {
+    where += ' AND t.direction = ?';
+    params.push(options.direction);
+  }
   if (options.categoryId) {
     where += ' AND t.category_id = ?';
     params.push(options.categoryId);
@@ -386,15 +558,23 @@ export async function listConfirmed(options: {
   return result.rows.map(toTransaction);
 }
 
-export async function sumDebits(from: number, to: number): Promise<number> {
+/** Confirmed total for one direction. Spent and received are never netted together. */
+export async function sumByDirection(
+  from: number,
+  to: number,
+  direction: Direction,
+): Promise<number> {
   const db = await getDb();
   const result = await db.execute(
     `SELECT COALESCE(SUM(amount_paise), 0) AS total FROM transactions
-     WHERE status = 'confirmed' AND direction = 'debit' AND occurred_at >= ? AND occurred_at < ?`,
-    [from, to],
+     WHERE status = 'confirmed' AND direction = ? AND occurred_at >= ? AND occurred_at < ?`,
+    [direction, from, to],
   );
   return num(result.rows[0]?.total) ?? 0;
 }
+
+export const sumDebits = (from: number, to: number) =>
+  sumByDirection(from, to, 'debit');
 
 export type CategoryTotal = {
   categoryId: string;
@@ -408,15 +588,16 @@ export type MerchantTotal = { name: string; totalPaise: number; count: number };
 export async function categoryTotals(
   from: number,
   to: number,
+  direction: Direction = 'debit',
 ): Promise<CategoryTotal[]> {
   const db = await getDb();
   const result = await db.execute(
     `SELECT t.category_id, COALESCE(c.name, t.category_id) AS name, COALESCE(c.icon, '') AS icon,
             SUM(t.amount_paise) AS total, COUNT(*) AS n
      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.status = 'confirmed' AND t.direction = 'debit' AND t.occurred_at >= ? AND t.occurred_at < ?
+     WHERE t.status = 'confirmed' AND t.direction = ? AND t.occurred_at >= ? AND t.occurred_at < ?
      GROUP BY t.category_id ORDER BY total DESC`,
-    [from, to],
+    [direction, from, to],
   );
   return result.rows.map(row => ({
     categoryId: str(row.category_id) ?? UNCATEGORIZED,
@@ -430,6 +611,7 @@ export async function categoryTotals(
 export async function topMerchants(
   from: number,
   to: number,
+  direction: Direction = 'debit',
   limit = 5,
 ): Promise<MerchantTotal[]> {
   const db = await getDb();
@@ -437,10 +619,10 @@ export async function topMerchants(
     `SELECT COALESCE(m.display_name, t.merchant_raw, 'Unknown') AS name,
             SUM(t.amount_paise) AS total, COUNT(*) AS n
      FROM transactions t LEFT JOIN merchants m ON m.id = t.merchant_id
-     WHERE t.status = 'confirmed' AND t.direction = 'debit' AND t.occurred_at >= ? AND t.occurred_at < ?
+     WHERE t.status = 'confirmed' AND t.direction = ? AND t.occurred_at >= ? AND t.occurred_at < ?
      GROUP BY COALESCE(CAST(t.merchant_id AS TEXT), t.merchant_raw, 'Unknown')
      ORDER BY total DESC LIMIT ?`,
-    [from, to, limit],
+    [direction, from, to, limit],
   );
   return result.rows.map(row => ({
     name: str(row.name) ?? 'Unknown',

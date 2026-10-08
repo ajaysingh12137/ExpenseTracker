@@ -133,7 +133,11 @@ function mergeRuleHints(
   ai: ParsedTransaction,
   ruled: ParsedTransaction,
 ): ParsedTransaction {
-  return { ...ai, accountHint: ai.accountHint ?? ruled.accountHint };
+  return {
+    ...ai,
+    accountHint: ai.accountHint ?? ruled.accountHint,
+    reference: ai.reference ?? ruled.reference ?? null,
+  };
 }
 
 async function reparseIfParserChanged(): Promise<void> {

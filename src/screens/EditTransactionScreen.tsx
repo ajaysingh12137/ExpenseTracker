@@ -7,22 +7,25 @@ import {
   Check,
   ChevronDown,
   CopyCheck,
-  MessageSquareText,
   Save,
   Sparkles,
   StickyNote,
   Store,
   Trash,
+  Split,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   getCategories,
-  getRawText,
   getTransaction,
   setStatus,
   updateTransaction,
+  listSources,
+  splitSource,
 } from '../db/repository';
+import { sourceIcon, sourceLabel } from '../capture/sourceLabels';
+import { processCaptures } from '../pipeline/processCaptures';
 import { formatDateTime, parseDayInput, toDayInput } from '../domain/dates';
 import { formatPaise, parseRupeesToPaise } from '../domain/money';
 import type { Direction, Transaction } from '../domain/types';
@@ -33,6 +36,7 @@ import {
   Button,
   CategoryBadge,
   CategoryPicker,
+  Divider,
   Chip,
   Field,
   GlassCard,
@@ -52,9 +56,9 @@ export function EditTransactionScreen({ route, navigation }: Props) {
   const t = useTheme();
   const categories = useDbQuery(getCategories, []);
   const [tx, setTx] = useState<Transaction | null>(null);
-  const [raw, setRaw] = useState<{ title: string; body: string } | null>(null);
+  const sources = useDbQuery(() => listSources(id), [id]);
   const [duplicate, setDuplicate] = useState<Transaction | null>(null);
-  const [showRaw, setShowRaw] = useState(false);
+  const [openSource, setOpenSource] = useState<number | null>(null);
 
   const [amount, setAmount] = useState('');
   const [direction, setDirection] = useState<Direction>('debit');
@@ -83,9 +87,6 @@ export function EditTransactionScreen({ route, navigation }: Props) {
       setCategoryId(loaded.categoryId);
       setDay(toDayInput(loaded.occurredAt));
       setNote(loaded.note ?? '');
-      if (loaded.rawCaptureId !== null) {
-        setRaw(await getRawText(loaded.rawCaptureId));
-      }
       if (loaded.possibleDuplicateOf !== null) {
         setDuplicate(await getTransaction(loaded.possibleDuplicateOf));
       }
@@ -267,37 +268,83 @@ export function EditTransactionScreen({ route, navigation }: Props) {
         </>
       )}
 
-      {raw && (
+      {(sources.data ?? []).length > 0 && (
         <>
-          <SectionTitle>Source</SectionTitle>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showRaw }}
-            accessibilityLabel="Original notification"
-            onPress={() => setShowRaw(v => !v)}
-          >
-            <GlassCard>
-              <View style={styles.rowCenter}>
-                <IconBadge
-                  icon={MessageSquareText}
-                  color={t.textMuted}
-                  size={36}
-                />
-                <Text style={[type.label, styles.flex, { color: t.text }]}>
-                  Original notification
-                </Text>
-                <View style={showRaw ? styles.rotated : undefined}>
-                  <ChevronDown size={18} color={t.textSubtle} />
+          <SectionTitle>
+            {(sources.data ?? []).length > 1
+              ? `Reported by ${(sources.data ?? []).length} apps`
+              : 'Source'}
+          </SectionTitle>
+          <GlassCard>
+            {(sources.data ?? []).map((source, index) => {
+              const open = openSource === source.rawCaptureId;
+              return (
+                <View key={source.rawCaptureId}>
+                  {index > 0 && <Divider />}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open }}
+                    accessibilityLabel={`${sourceLabel(
+                      source.packageName,
+                    )} notification`}
+                    onPress={() =>
+                      setOpenSource(open ? null : source.rawCaptureId)
+                    }
+                    style={styles.rowCenter}
+                  >
+                    <IconBadge
+                      icon={sourceIcon(source.packageName)}
+                      color={t.primary}
+                      size={36}
+                    />
+                    <View style={styles.flex}>
+                      <Text style={[type.label, { color: t.text }]}>
+                        {sourceLabel(source.packageName)}
+                      </Text>
+                      <Text style={[type.caption, { color: t.textMuted }]}>
+                        {formatDateTime(source.postedAt)}
+                      </Text>
+                    </View>
+                    <View style={open ? styles.rotated : undefined}>
+                      <ChevronDown size={18} color={t.textSubtle} />
+                    </View>
+                  </Pressable>
+                  {open && (
+                    <View style={styles.rawBody}>
+                      <Body>{source.title}</Body>
+                      <Body muted>{source.body}</Body>
+                      {!source.primary && (
+                        <Button
+                          label="Separate payment? Split"
+                          icon={Split}
+                          variant="secondary"
+                          compact
+                          onPress={() =>
+                            Alert.alert(
+                              'Split into its own payment?',
+                              `Use this if the ${sourceLabel(
+                                source.packageName,
+                              )} alert was a different payment. It becomes a separate entry in the Inbox.`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Split',
+                                  onPress: async () => {
+                                    await splitSource(source.rawCaptureId);
+                                    processCaptures().catch(() => {});
+                                  },
+                                },
+                              ],
+                            )
+                          }
+                        />
+                      )}
+                    </View>
+                  )}
                 </View>
-              </View>
-              {showRaw && (
-                <View style={styles.rawBody}>
-                  <Body>{raw.title}</Body>
-                  <Body muted>{raw.body}</Body>
-                </View>
-              )}
-            </GlassCard>
-          </Pressable>
+              );
+            })}
+          </GlassCard>
         </>
       )}
 

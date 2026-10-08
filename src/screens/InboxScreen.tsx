@@ -1,7 +1,10 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   CopyCheck,
+  Layers,
   Hand,
   Inbox,
   Sparkles,
@@ -23,6 +26,7 @@ import {
   Empty,
   Screen,
   TAB_BAR_SPACE,
+  Segmented,
 } from '../ui/components';
 import { SwipeRow } from '../ui/SwipeRow';
 import { alpha, radius, spacing, type, useTheme } from '../ui/theme';
@@ -80,7 +84,13 @@ export function InboxScreen() {
     [showUndo],
   );
 
-  const count = drafts.data?.length ?? 0;
+  const [filter, setFilter] = useState<'all' | 'debit' | 'credit'>('all');
+  const all = drafts.data ?? [];
+  const count = all.length;
+  const spentCount = all.filter(d => d.direction === 'debit').length;
+  const receivedCount = count - spentCount;
+  const visible =
+    filter === 'all' ? all : all.filter(d => d.direction === filter);
 
   return (
     <Screen
@@ -89,23 +99,44 @@ export function InboxScreen() {
       subtitle={count > 0 ? `${count} to review` : 'Nothing pending'}
     >
       <FlatList
-        data={drafts.data ?? []}
+        data={visible}
         keyExtractor={item => String(item.id)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_SPACE }}
         ListHeaderComponent={
           count > 0 ? (
-            <View
-              style={[
-                styles.hint,
-                { backgroundColor: alpha(t.primary, t.dark ? 0.16 : 0.08) },
-              ]}
-            >
-              <Hand size={16} color={t.primary} />
-              <Text style={[type.caption, styles.flex, { color: t.textMuted }]}>
-                Swipe right to confirm, left to ignore. Tap to edit.
-              </Text>
-            </View>
+            <>
+              <Segmented
+                options={[
+                  { value: 'all', label: `All ${count}` },
+                  {
+                    value: 'debit',
+                    label: `Spent ${spentCount}`,
+                    icon: ArrowUpRight,
+                  },
+                  {
+                    value: 'credit',
+                    label: `Received ${receivedCount}`,
+                    icon: ArrowDownLeft,
+                  },
+                ]}
+                value={filter}
+                onChange={setFilter}
+              />
+              <View
+                style={[
+                  styles.hint,
+                  { backgroundColor: alpha(t.primary, t.dark ? 0.16 : 0.08) },
+                ]}
+              >
+                <Hand size={16} color={t.primary} />
+                <Text
+                  style={[type.caption, styles.flex, { color: t.textMuted }]}
+                >
+                  Swipe right to confirm, left to ignore. Tap to edit.
+                </Text>
+              </View>
+            </>
           ) : undefined
         }
         ListEmptyComponent={
@@ -151,8 +182,16 @@ export function InboxScreen() {
                   </Text>
                   {(needsDetails ||
                     item.possibleDuplicateOf !== null ||
+                    item.sourceCount > 1 ||
                     item.parsedBy === 'ai') && (
                     <View style={styles.chips}>
+                      {item.sourceCount > 1 && (
+                        <Chip
+                          label={`${item.sourceCount} sources`}
+                          icon={Layers}
+                          tone="success"
+                        />
+                      )}
                       {needsDetails && (
                         <Chip
                           label="Needs details"
