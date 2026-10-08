@@ -10,6 +10,7 @@ import {
   Inbox,
   Mic,
   PauseCircle,
+  PlugZap,
   Plus,
   Receipt,
   TrendingDown,
@@ -20,6 +21,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCaptureStatus } from '../capture/CaptureProvider';
+import { useReconnectWithFeedback } from '../capture/useReconnect';
 import {
   countDrafts,
   listConfirmed,
@@ -68,6 +70,9 @@ export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const t = useTheme();
   const status = useCaptureStatus();
+  const { reconnect, reconnecting } = useReconnectWithFeedback({
+    onOpenBatterySettings: () => navigation.navigate('BatteryGuide'),
+  });
   const now = new Date();
   const [todayFrom, todayTo] = dayRange(now);
   const [monthFrom, monthTo] = monthRange(now.getFullYear(), now.getMonth());
@@ -134,13 +139,15 @@ export function HomeScreen() {
             icon={Unplug}
             iconColor={t.warning}
             title="Your phone stopped capture"
-            subtitle="Android paused the payment listener, usually to save battery. Reconnect, then check battery settings."
+            subtitle="Android paused the payment listener, usually to save battery (more likely on low battery or Battery Saver)."
           />
           <Button
-            label="Reconnect"
+            label={reconnecting ? 'Reconnecting…' : 'Reconnect'}
+            icon={PlugZap}
             compact
+            busy={reconnecting}
             onPress={() => {
-              status.reconnect().catch(() => {});
+              reconnect().catch(() => {});
             }}
           />
         </GlassCard>

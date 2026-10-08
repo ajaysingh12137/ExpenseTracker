@@ -6,7 +6,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import com.facebook.react.bridge.Arguments
@@ -195,6 +197,8 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
         putDouble("connectedAt", CaptureStats.connectedAt(context).toDouble())
         putDouble("disconnectedAt", CaptureStats.disconnectedAt(context).toDouble())
         putDouble("statsSince", CaptureStats.since(context).toDouble())
+        val power = context.getSystemService(PowerManager::class.java)
+        putBoolean("powerSaveMode", power?.isPowerSaveMode == true)
         putArray("sources", sources)
       },
     )
@@ -210,15 +214,33 @@ class TransactionCaptureModule(reactContext: ReactApplicationContext) :
    * telling anyone; this is the supported way back (API 24+). No effect without access.
    */
   override fun rebindListener(promise: Promise) {
-    if (!hasListenerAccess(reactApplicationContext)) {
+    val context = reactApplicationContext
+    if (!hasListenerAccess(context)) {
       promise.resolve(false)
       return
     }
-    try {
-      NotificationListenerService.requestRebind(listenerComponent)
-      promise.resolve(true)
-    } catch (_: Exception) {
-      promise.resolve(false)
+    io.execute {
+      try {
+        // requestRebind() alone only undoes our own requestUnbind(); when the system or an OEM
+        // battery manager dropped the binding it is usually ignored. Toggling the component's
+        // enabled state makes NotificationManagerService see a changed component and bind it
+        // again (widely used workaround; behaviour can vary by OEM).
+        val pm = context.packageManager
+        pm.setComponentEnabledSetting(
+          listenerComponent,
+          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+          PackageManager.DONT_KILL_APP,
+        )
+        pm.setComponentEnabledSetting(
+          listenerComponent,
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+          PackageManager.DONT_KILL_APP,
+        )
+        NotificationListenerService.requestRebind(listenerComponent)
+        promise.resolve(true)
+      } catch (_: Exception) {
+        promise.resolve(false)
+      }
     }
   }
 

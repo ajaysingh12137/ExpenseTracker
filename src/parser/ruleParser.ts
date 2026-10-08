@@ -11,7 +11,7 @@ import type { Direction, ParsedTransaction } from '../domain/types';
  * Bump PARSER_VERSION whenever behaviour changes; raw captures parsed with an older version
  * can then be re-parsed.
  */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 /** Below this the result is treated as unparsed and handed to the AI fallback. */
 export const CONFIDENCE_FLOOR = 0.75;

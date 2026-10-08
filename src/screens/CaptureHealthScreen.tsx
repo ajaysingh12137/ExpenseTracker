@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, StyleSheet, Text, View } from 'react-native';
 import { useCaptureStatus } from '../capture/CaptureProvider';
 import { sourceIcon, sourceLabel } from '../capture/sourceLabels';
+import { useReconnectWithFeedback } from '../capture/useReconnect';
 import {
   getCaptureConfig,
   getCaptureHealth,
@@ -93,7 +94,6 @@ export function CaptureHealthScreen() {
   const [health, setHealth] = useState<CaptureHealth | null>(null);
   const [config, setConfig] = useState<CaptureConfig | null>(null);
   const [battery, setBattery] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setHealth(await getCaptureHealth());
@@ -110,11 +110,12 @@ export function CaptureHealthScreen() {
     return () => sub.remove();
   }, [load]);
 
+  const feedback = useReconnectWithFeedback({
+    onOpenBatterySettings: () => navigation.navigate('BatteryGuide'),
+  });
   const reconnect = async () => {
-    setBusy(true);
-    await status.reconnect();
+    await feedback.reconnect();
     await load();
-    setBusy(false);
   };
 
   const allowed = new Set([
@@ -161,6 +162,16 @@ export function CaptureHealthScreen() {
           detail={config?.captureEnabled ? 'On' : 'Paused in Settings'}
         />
         <Divider />
+        {health?.powerSaveMode ? (
+          <>
+            <Check
+              ok={false}
+              title="Battery Saver is on"
+              detail="It can stop capture in the background. Charge or turn it off."
+            />
+            <Divider />
+          </>
+        ) : null}
         <Check
           ok={!!battery}
           title="Battery optimization off"
@@ -180,10 +191,12 @@ export function CaptureHealthScreen() {
         )}
         {health?.permissionGranted && !health.listenerConnected && (
           <Button
-            label="Reconnect listener"
+            label={
+              feedback.reconnecting ? 'Reconnecting…' : 'Reconnect listener'
+            }
             icon={PlugZap}
             compact
-            busy={busy}
+            busy={feedback.reconnecting}
             onPress={reconnect}
           />
         )}

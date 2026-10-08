@@ -621,14 +621,14 @@ export function Button({
       ]}
     >
       {isPrimary ? <GradientFill rounded={radius.md} /> : null}
-      {busy ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <View style={styles.buttonInner}>
-          {Icon ? <Icon size={19} color={fg} strokeWidth={2.3} /> : null}
-          <Text style={[type.label, { color: fg }]}>{label}</Text>
-        </View>
-      )}
+      <View style={styles.buttonInner}>
+        {busy ? (
+          <ActivityIndicator color={fg} size="small" />
+        ) : Icon ? (
+          <Icon size={19} color={fg} strokeWidth={2.3} />
+        ) : null}
+        <Text style={[type.label, { color: fg }]}>{label}</Text>
+      </View>
     </Pressable>
   );
 }

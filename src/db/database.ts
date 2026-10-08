@@ -80,6 +80,11 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
     `UPDATE raw_captures SET transaction_id =
        (SELECT t.id FROM transactions t WHERE t.raw_capture_id = raw_captures.id)`,
   ],
+  // v3: friendlier names for the catch-all and person-to-person categories.
+  [
+    "UPDATE categories SET name = 'Other' WHERE id = 'uncategorized'",
+    "UPDATE categories SET name = 'People & transfers' WHERE id = 'transfers'",
+  ],
 ];
 
 let db: DB | null = null;

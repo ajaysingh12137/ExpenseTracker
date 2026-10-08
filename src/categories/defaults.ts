@@ -16,9 +16,9 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<Category> = [
   { id: 'entertainment', name: 'Entertainment', icon: '🎬', isDefault: true },
   { id: 'travel', name: 'Travel', icon: '✈️', isDefault: true },
   { id: 'education', name: 'Education', icon: '📚', isDefault: true },
-  { id: 'transfers', name: 'Transfers', icon: '🔁', isDefault: true },
+  { id: 'transfers', name: 'People & transfers', icon: '🔁', isDefault: true },
   { id: INCOME, name: 'Income', icon: '💰', isDefault: true },
-  { id: UNCATEGORIZED, name: 'Uncategorized', icon: '❓', isDefault: true },
+  { id: UNCATEGORIZED, name: 'Other', icon: '❓', isDefault: true },
 ];
 
 /**

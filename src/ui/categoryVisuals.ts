@@ -1,7 +1,5 @@
 import {
-  ArrowLeftRight,
   Car,
-  CircleQuestionMark,
   Clapperboard,
   Fuel,
   GraduationCap,
@@ -9,9 +7,11 @@ import {
   House,
   Lightbulb,
   Plane,
+  Shapes,
   ShoppingBag,
   ShoppingCart,
   Smartphone,
+  Users,
   Utensils,
   Wallet,
 } from 'lucide-react-native';
@@ -36,9 +36,9 @@ const VISUALS: Record<string, CategoryVisual> = {
   entertainment: { Icon: Clapperboard, color: '#D946EF' },
   travel: { Icon: Plane, color: '#06B6D4' },
   education: { Icon: GraduationCap, color: '#3B82F6' },
-  transfers: { Icon: ArrowLeftRight, color: '#64748B' },
+  transfers: { Icon: Users, color: '#6366F1' },
   income: { Icon: Wallet, color: '#10B981' },
-  uncategorized: { Icon: CircleQuestionMark, color: '#94A3B8' },
+  uncategorized: { Icon: Shapes, color: '#0D9488' },
 };
 
 export function categoryVisual(id: string | null | undefined): CategoryVisual {

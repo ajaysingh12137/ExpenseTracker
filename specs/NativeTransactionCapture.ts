@@ -47,6 +47,8 @@ export type CaptureHealth = {
   connectedAt: number;
   disconnectedAt: number;
   statsSince: number;
+  /** Android Battery Saver is on (it can stop background listeners, especially on low battery). */
+  powerSaveMode: boolean;
   sources: ReadonlyArray<CaptureSourceStat>;
 };
 

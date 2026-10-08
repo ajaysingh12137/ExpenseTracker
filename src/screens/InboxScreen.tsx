@@ -8,6 +8,7 @@ import {
   Hand,
   Inbox,
   Sparkles,
+  Tag,
   TriangleAlert,
   Undo2,
 } from 'lucide-react-native';
@@ -183,8 +184,16 @@ export function InboxScreen() {
                   {(needsDetails ||
                     item.possibleDuplicateOf !== null ||
                     item.sourceCount > 1 ||
+                    item.categoryId === 'uncategorized' ||
                     item.parsedBy === 'ai') && (
                     <View style={styles.chips}>
+                      {item.categoryId === 'uncategorized' && !needsDetails && (
+                        <Chip
+                          label="Pick a category"
+                          icon={Tag}
+                          tone="primary"
+                        />
+                      )}
                       {item.sourceCount > 1 && (
                         <Chip
                           label={`${item.sourceCount} sources`}

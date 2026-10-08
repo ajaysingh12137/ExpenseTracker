@@ -342,6 +342,7 @@ export async function createDraftFromCapture(
     const categoryId = categorize({
       direction: parsed.direction,
       normalizedMerchant: normalized,
+      merchantRaw: parsed.merchantRaw,
       overrideCategoryId: merchant?.override ?? null,
       merchantDefaultCategoryId: merchant?.defaultCategory ?? null,
       aiGuess: parsed.categoryGuess ?? null,
@@ -740,6 +741,7 @@ export async function addManualTransaction(input: {
         : categorize({
             direction: input.direction,
             normalizedMerchant: normalized,
+            merchantRaw: input.merchant,
             overrideCategoryId: merchant?.override ?? null,
             merchantDefaultCategoryId: merchant?.defaultCategory ?? null,
             knownCategoryIds: known,

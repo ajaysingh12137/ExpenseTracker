@@ -192,3 +192,41 @@ describe('dates', () => {
     expect(parseDayInput('2026-10-05', keep)).toBeNull();
   });
 });
+
+describe('person-to-person payees', () => {
+  const known = new Set(['transfers', 'uncategorized', 'income', 'food']);
+  const debit = (merchant: string) =>
+    categorize({
+      direction: 'debit',
+      normalizedMerchant: normalizeMerchant(merchant),
+      merchantRaw: merchant,
+      overrideCategoryId: null,
+      merchantDefaultCategoryId: null,
+      knownCategoryIds: known,
+    });
+
+  test('phone-number UPI IDs and plain names go to People & transfers', () => {
+    expect(debit('9876543210')).toBe('transfers');
+    expect(debit('RAMESH KUMAR')).toBe('transfers');
+    expect(debit('Priya S. Sharma')).toBe('transfers');
+  });
+
+  test('businesses and keyword matches are not people', () => {
+    expect(debit('RAMESH GENERAL STORE')).toBe('uncategorized');
+    expect(debit('Sharma Sweets')).toBe('uncategorized');
+    expect(debit('Cafe Coffee Day')).toBe('food');
+    expect(debit('ABC')).toBe('uncategorized');
+  });
+
+  test('money received from a person stays income', () => {
+    expect(
+      categorize({
+        direction: 'credit',
+        normalizedMerchant: 'ramesh kumar',
+        overrideCategoryId: null,
+        merchantDefaultCategoryId: null,
+        knownCategoryIds: known,
+      }),
+    ).toBe('income');
+  });
+});

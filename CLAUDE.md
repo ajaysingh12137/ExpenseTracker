@@ -51,8 +51,12 @@ docs/PRD.md docs/ROADMAP.md
 - **Spent and received are never netted.** Queries take a `direction`; Home, Inbox, Insights
   and category lists show them separately.
 - **Capture health** (`CaptureStats.kt`, Settings → Capture health): per-package counts and
-  timestamps only. App silently calls `rebindListener()` on foreground if access is granted but
-  the listener is unbound.
+  timestamps only. `rebindListener()` toggles the listener component disabled/enabled, then
+  requestRebind (requestRebind alone is ignored when the system/OEM dropped the binding). The
+  provider polls up to 8 s; manual Reconnect always reports the outcome (`useReconnect.ts`).
+  Verify binding with: adb shell dumpsys notification | grep -A20 "Live notification listeners".
+- Categories: "uncategorized" is shown as **Other**; person-like payees (phone-number VPA or 2-4
+  word plain name, no business word) default to **People & transfers** (`looksLikePerson`).
 - **Raw text kept separate from transactions**; `PARSER_VERSION` bump re-parses rule drafts.
 - **Capture master switch** (`CaptureConfig.isCaptureEnabled`) is off until the disclosure is
   accepted; Settings can turn it off without revoking system access.

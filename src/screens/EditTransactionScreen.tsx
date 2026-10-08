@@ -142,6 +142,30 @@ export function EditTransactionScreen({ route, navigation }: Props) {
     navigation.goBack();
   };
 
+  /** Destructive: always confirm, naming what will go. */
+  const confirmRemove = () => {
+    const what = `${formatPaise(tx.amountPaise)}${
+      tx.merchantName ? ` to ${tx.merchantName}` : ''
+    }`;
+    const draft = tx.status === 'draft';
+    Alert.alert(
+      draft ? 'Not an expense?' : 'Delete this expense?',
+      draft
+        ? `${what} will be removed from your Inbox and won't count in your totals.`
+        : `${what} will be removed from your totals and history.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: draft ? 'Remove' : 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            ignore().catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <Screen
       onBack={navigation.goBack}
@@ -244,7 +268,7 @@ export function EditTransactionScreen({ route, navigation }: Props) {
                 label="Not an expense"
                 icon={Ban}
                 variant="danger"
-                onPress={ignore}
+                onPress={confirmRemove}
                 disabled={busy}
               />
             </View>
@@ -262,7 +286,7 @@ export function EditTransactionScreen({ route, navigation }: Props) {
             label="Delete expense"
             icon={Trash}
             variant="danger"
-            onPress={ignore}
+            onPress={confirmRemove}
             disabled={busy}
           />
         </>
